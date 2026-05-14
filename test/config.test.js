@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { shellCommand } from "../src/agent.js";
+import { cleanTurnOutput, shellCommand } from "../src/agent.js";
 import { normalizeAgent, parseComposerCommand, parseModelOverrides, runtimeSetAgentModel } from "../src/config.js";
 
 test("parseComposerCommand treats plain text as a note for the active chat", () => {
@@ -46,8 +46,9 @@ test("normalizeAgent creates stable ids and cwd", () => {
     id: "claude-code",
     name: "Claude Code",
     command: "claude",
-    args: [],
-    baseArgs: [],
+    mode: "turn",
+    args: ["--print", "--output-format", "text"],
+    baseArgs: ["--print", "--output-format", "text"],
     model: undefined,
     modelArg: "--model",
     bracketedPaste: true,
@@ -68,6 +69,17 @@ test("normalizeAgent appends model args without removing resume args", () => {
     normalizeAgent({ id: "codex", command: "codex", model: "gpt-5.3-codex", args: ["resume", "--last"] }, "/tmp/work", 0).args,
     ["resume", "--last", "--model", "gpt-5.3-codex"]
   );
+});
+
+test("normalizeAgent inserts codex model before stdin prompt marker", () => {
+  assert.deepEqual(normalizeAgent({ id: "codex", command: "codex", model: "gpt-5.3-codex" }, "/tmp/work", 0).args, [
+    "exec",
+    "--color",
+    "never",
+    "--model",
+    "gpt-5.3-codex",
+    "-"
+  ]);
 });
 
 test("normalizeAgent prefers configured aliases for display routing", () => {
@@ -94,4 +106,11 @@ test("runtimeSetAgentModel updates model args from base args", () => {
 
 test("shellCommand preserves arguments with spaces and quotes", () => {
   assert.equal(shellCommand("node", ["-e", "console.log('hello world')"]), "node -e 'console.log('\\''hello world'\\'')'");
+});
+
+test("cleanTurnOutput removes provider progress noise", () => {
+  assert.equal(
+    cleanTurnOutput("Working q\nThinking\n*Churned for 3s\n[Pasted text #2+306 lines]\n답변입니다\n* Honking... (3s · 5 tokens)\n"),
+    "답변입니다"
+  );
 });

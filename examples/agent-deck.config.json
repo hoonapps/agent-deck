@@ -9,6 +9,7 @@
       "aliases": ["co"],
       "name": "Codex",
       "command": "codex",
+      "mode": "turn",
       "model": "gpt-5.3-codex",
       "args": []
     },
@@ -17,6 +18,7 @@
       "aliases": ["cl"],
       "name": "Claude",
       "command": "claude",
+      "mode": "turn",
       "model": "sonnet",
       "args": []
     }

@@ -8,10 +8,11 @@
       "aliases": ["ea"],
       "name": "Echo A",
       "command": "node",
+      "mode": "turn",
       "bracketedPaste": false,
       "args": [
         "-e",
-        "console.log('Echo A ready'); process.stdin.on('data', d => process.stdout.write('A> ' + d))"
+        "process.stdin.on('data', d => process.stdout.write('A> ' + d))"
       ]
     },
     {
@@ -19,10 +20,11 @@
       "aliases": ["eb"],
       "name": "Echo B",
       "command": "node",
+      "mode": "turn",
       "bracketedPaste": false,
       "args": [
         "-e",
-        "console.log('Echo B ready'); process.stdin.on('data', d => process.stdout.write('B> ' + d))"
+        "process.stdin.on('data', d => process.stdout.write('B> ' + d))"
       ]
     }
   ]

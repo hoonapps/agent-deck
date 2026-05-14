@@ -39,8 +39,8 @@ Composer commands:
   /exit-chat              Leave the current agent chat
   /help                   Show command help
 
-While inside an agent chat, unknown slash commands are forwarded to that agent.
-For example: /co, then /resume or /model is sent to Codex.
+Default clean mode shows only your message and the final answer.
+Set mode="interactive" in config if you want the raw provider TUI.
 `);
 }
 
@@ -91,8 +91,8 @@ function initConfig() {
         shareHistory: true,
         maxHistoryChars: 6000,
         agents: [
-          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", model: "gpt-5.3-codex", args: [] },
-          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", model: "sonnet", args: [] }
+          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", mode: "turn", model: "gpt-5.3-codex", args: [] },
+          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", mode: "turn", model: "sonnet", args: [] }
         ]
       },
       null,

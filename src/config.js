@@ -15,8 +15,8 @@ export function defaultConfig(cwd = process.cwd()) {
     maxHistoryChars: 6000,
     testCommand: "npm test",
     agents: [
-      { id: "codex", name: "Codex", command: "codex", args: [], cwd },
-      { id: "claude", name: "Claude", command: "claude", args: [], cwd }
+      { id: "codex", name: "Codex", command: "codex", mode: "turn", args: ["exec", "--color", "never", "-"], cwd },
+      { id: "claude", name: "Claude", command: "claude", mode: "turn", args: ["--print", "--output-format", "text"], cwd }
     ]
   };
 }
@@ -55,13 +55,15 @@ export function normalizeAgent(agent, workspace, index = 0) {
   }
   const id = normalizeId(agent.id || agent.name || `agent-${index + 1}`);
   const model = typeof agent.model === "string" && agent.model.trim() ? agent.model.trim() : undefined;
-  const rawArgs = Array.isArray(agent.args) ? agent.args.map(String) : [];
+  const mode = agent.mode === "interactive" ? "interactive" : "turn";
+  const rawArgs = normalizedArgs(agent, id, mode);
   const aliases = normalizeAliases(id, agent.aliases);
   return {
     id,
     name: agent.name || id,
     label: model ? `${agent.name || id} [${model}]` : agent.name || id,
     command: agent.command,
+    mode,
     args: argsWithModel(rawArgs, model, agent.modelArg),
     baseArgs: rawArgs,
     model,
@@ -210,7 +212,10 @@ export function runtimeSetAgentModel(agent, model) {
 
 function argsWithModel(args, model, modelArg = "--model") {
   if (!model || modelArg === false || hasModelArg(args)) return args;
-  return [...args, modelArg || "--model", model];
+  const marker = args.lastIndexOf("-");
+  const modelArgs = [modelArg || "--model", model];
+  if (marker >= 0) return [...args.slice(0, marker), ...modelArgs, ...args.slice(marker)];
+  return [...args, ...modelArgs];
 }
 
 function hasModelArg(args) {
@@ -229,4 +234,12 @@ function modelForAgent(agent, id, overrides) {
 
 function modelEnvName(id) {
   return `AGENT_DECK_${id.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_MODEL`;
+}
+
+function normalizedArgs(agent, id, mode) {
+  const args = Array.isArray(agent.args) ? agent.args.map(String) : [];
+  if (mode !== "turn" || args.length > 0) return args;
+  if (id === "codex" || agent.command === "codex") return ["exec", "--color", "never", "-"];
+  if (id === "claude" || agent.command === "claude") return ["--print", "--output-format", "text"];
+  return args;
 }

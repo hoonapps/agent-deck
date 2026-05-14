@@ -42,15 +42,18 @@ class AgentDeckApp {
     this.screen = blessed.screen({
       smartCSR: true,
       fullUnicode: true,
+      dockBorders: true,
       title: this.config.title
     });
+    this.screen.program.alternateBuffer();
+    this.screen.program.hideCursor();
 
     this.createLayout();
     this.bindKeys();
     this.startAgents();
     this.refreshHistory();
     this.log(`Session transcript: ${this.transcript.path}`);
-    this.log("Use /co or /cl to enter an agent chat. Agent slash commands are forwarded while in a chat.");
+    this.log("Use /co or /cl to enter an agent chat. Clean mode shows only your message and the answer.");
     this.input.focus();
     this.render();
   }
@@ -66,7 +69,9 @@ class AgentDeckApp {
     });
     this.screen.append(this.header);
 
-    const gridHeight = Math.max(14, Math.floor((this.screen.height || 40) * 0.62));
+    const screenHeight = this.screen.height || 40;
+    const bottomPanelHeight = Math.min(9, Math.max(6, Math.floor(screenHeight * 0.18)));
+    const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - 4);
     this.grid = blessed.layout({
       top: 1,
       left: 0,
@@ -251,6 +256,7 @@ class AgentDeckApp {
     }
     if (enterChat) this.updateActiveAgent(agent.id);
     const outbound = this.buildAgentMessage(agent, message);
+    this.appendUserMessage(agent.id, message);
     this.agentProcess(agent.id)?.writeLine(outbound);
     this.transcript.input(agent.id, message);
     this.refreshHistory();
@@ -263,6 +269,7 @@ class AgentDeckApp {
       return;
     }
     for (const agent of this.config.agents) {
+      this.appendUserMessage(agent.id, message);
       this.agentProcess(agent.id)?.writeLine(this.buildAgentMessage(agent, message));
     }
     this.transcript.input("all", message);
@@ -342,10 +349,22 @@ class AgentDeckApp {
   appendAgentOutput(agentId, data) {
     const box = this.boxes.get(agentId);
     if (!box) return;
-    box.pushLine(data.replace(/\n$/g, ""));
+    const agent = this.findAgent(agentId);
+    const text = data.replace(/\n$/g, "");
+    box.pushLine(formatPaneMessage(agent?.name || agentId, text));
+    box.pushLine("");
     box.setScrollPerc(100);
     this.transcript.output(agentId, data);
     this.refreshHistory();
+    this.render();
+  }
+
+  appendUserMessage(agentId, message) {
+    const box = this.boxes.get(agentId);
+    if (!box) return;
+    box.pushLine(formatPaneMessage("You", message));
+    box.pushLine("");
+    box.setScrollPerc(100);
     this.render();
   }
 
@@ -437,6 +456,14 @@ class AgentDeckApp {
 
   shutdown() {
     for (const process of this.agents.values()) process.stop();
+    this.screen.program.showCursor();
+    this.screen.program.normalBuffer();
     this.screen.destroy();
   }
+}
+
+function formatPaneMessage(label, message) {
+  const text = String(message).trim();
+  if (!text) return `${label}:`;
+  return `${label}:\n${text}`;
 }

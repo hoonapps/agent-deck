@@ -44,7 +44,7 @@ export class Transcript {
   }
 
   panelText(maxChars = 5000) {
-    const context = this.recentContext(maxChars);
+    const context = fitToMaxChars(this.entries.map(formatPanelEntry).join("\n\n"), maxChars);
     return [`Transcript file: ${this.path}`, "", context || "(No conversation history yet.)"].join("\n");
   }
 }
@@ -64,4 +64,9 @@ function fitToMaxChars(value, maxChars) {
   const text = String(value);
   if (text.length <= maxChars) return text;
   return `...[earlier history truncated]\n${text.slice(text.length - maxChars)}`;
+}
+
+function formatPanelEntry(entry) {
+  const source = entry.source.replace(/^input -> /, "You -> ").replace(/^output <- /, "");
+  return `${source}\n${truncate(entry.message, 900)}`;
 }

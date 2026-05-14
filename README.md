@@ -8,9 +8,9 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 
 ## Features
 
-- Run multiple interactive CLI agents in panes
+- Run multiple agent chats in one fixed-screen TUI
+- Default to clean turn mode so panes show only `You:` and the agent answer, not provider prompts or terminal status text
 - Enter an agent chat with `/co` or `/cl`, then send plain messages there
-- Forward agent-native slash commands such as `/resume`, `/help`, or `/model` while inside that chat
 - Send a prompt to one named agent or every agent
 - Keep a timestamped Markdown transcript under `.agent-deck/sessions`
 - Show recent shared history in a live context panel
@@ -90,20 +90,7 @@ agent-deck init
 
 Plain text is sent to the active agent chat. There is no active chat at startup, so accidental text is not sent anywhere until you route with `/co`, `/cl`, or `/to`.
 
-Agent-native slash commands are preserved. For example:
-
-```text
-/co
-/resume
-/model
-```
-
-After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an agent slash command without entering a chat first, put it behind a route:
-
-```text
-/to claude /help
-/codex /resume
-```
+By default Agent Deck uses clean turn mode. Codex is called through `codex exec`, and Claude is called through `claude --print`, so provider UI noise is not rendered into the pane. If you want the raw interactive CLI instead, set `mode: "interactive"` for that agent.
 
 ## Configuration
 
@@ -121,6 +108,7 @@ After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an
       "aliases": ["co"],
       "name": "Codex",
       "command": "codex",
+      "mode": "turn",
       "model": "gpt-5.3-codex",
       "args": []
     },
@@ -129,6 +117,7 @@ After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an
       "aliases": ["cl"],
       "name": "Claude",
       "command": "claude",
+      "mode": "turn",
       "model": "sonnet",
       "args": []
     }
@@ -136,7 +125,7 @@ After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an
 }
 ```
 
-Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
+Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `mode`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
 
 Model precedence is:
 
@@ -159,14 +148,20 @@ Change a running agent from inside the TUI:
 /set-model claude sonnet
 ```
 
-Agent Deck intentionally does not use `/model` as its own command. If you are inside `/co` or `/cl`, `/model` is forwarded to the underlying agent.
+For clean turn mode, leave `args` empty and Agent Deck will use the right default:
 
-To preserve existing CLI session commands, keep them in `args`:
+```text
+codex exec --color never -
+claude --print --output-format text
+```
+
+To use raw interactive CLI behavior, set `mode: "interactive"` and keep the native CLI command in `args`:
 
 ```json
 {
   "id": "codex",
   "command": "codex",
+  "mode": "interactive",
   "args": ["resume", "--last"],
   "model": "gpt-5.3-codex"
 }
@@ -176,6 +171,7 @@ To preserve existing CLI session commands, keep them in `args`:
 {
   "id": "claude",
   "command": "claude",
+  "mode": "interactive",
   "args": ["--resume"],
   "model": "sonnet"
 }

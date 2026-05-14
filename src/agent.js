@@ -1,4 +1,5 @@
 import EventEmitter from "node:events";
+import { spawn } from "node:child_process";
 import stripAnsi from "strip-ansi";
 import pty from "node-pty";
 
@@ -7,12 +8,14 @@ export class AgentProcess extends EventEmitter {
     super();
     this.agent = agent;
     this.pty = null;
+    this.child = null;
     this.started = false;
   }
 
   start() {
     if (this.started) return;
     this.started = true;
+    if (this.agent.mode === "turn") return;
     try {
       const spawn = shellSpawn(this.agent.command, this.agent.args);
       this.pty = pty.spawn(spawn.command, spawn.args, {
@@ -40,6 +43,10 @@ export class AgentProcess extends EventEmitter {
   }
 
   writeLine(text) {
+    if (this.agent.mode === "turn") {
+      this.runTurn(text);
+      return;
+    }
     if (!this.pty || !this.started) {
       this.emit("data", "\n[agent-deck] process is not running. Use /restart to start it again.\n");
       return;
@@ -62,6 +69,10 @@ export class AgentProcess extends EventEmitter {
   }
 
   stop() {
+    if (this.child) {
+      this.child.kill();
+      this.child = null;
+    }
     if (!this.pty) return;
     this.pty.kill();
     this.pty = null;
@@ -72,6 +83,43 @@ export class AgentProcess extends EventEmitter {
     this.stop();
     this.start();
   }
+
+  runTurn(text) {
+    if (this.child) {
+      this.emit("data", "[agent-deck] turn already running\n");
+      return;
+    }
+    this.started = true;
+    const child = spawn(this.agent.command, this.agent.args, {
+      cwd: this.agent.cwd,
+      env: { ...process.env, ...this.agent.env, TERM: "xterm-256color" },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    this.child = child;
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      this.child = null;
+      this.emit("data", `Failed to start ${this.agent.command}: ${error.message}\n`);
+      this.emit("exit", { code: 1, signal: null });
+    });
+    child.on("close", (code, signal) => {
+      this.child = null;
+      const output = cleanTurnOutput(stdout || stderr);
+      if (output) this.emit("data", output);
+      if (code !== 0) {
+        this.emit("data", `\n[agent-deck] ${this.agent.command} exited code=${code} signal=${signal || ""}\n`);
+      }
+      this.emit("turn-exit", { code, signal });
+    });
+    child.stdin.end(String(text));
+  }
 }
 
 export function cleanTerminalOutput(data) {
@@ -79,6 +127,29 @@ export function cleanTerminalOutput(data) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/\u0007/g, "");
+}
+
+export function cleanTurnOutput(data) {
+  return cleanTerminalOutput(data)
+    .split("\n")
+    .filter((line) => !isNoiseLine(line))
+    .join("\n")
+    .trim();
+}
+
+function isNoiseLine(line) {
+  const text = line.trim();
+  if (!text) return false;
+  return (
+    /^Working\b/i.test(text) ||
+    /^Thinking\b/i.test(text) ||
+    /^Honking\b/i.test(text) ||
+    /^\* ?Churned\b/i.test(text) ||
+    /^\* .+ tokens?\)/i.test(text) ||
+    /^\[Pasted text/i.test(text) ||
+    /^OpenAI Codex\b/i.test(text) ||
+    /^Tip: /i.test(text)
+  );
 }
 
 export function shellSpawn(command, args = []) {
