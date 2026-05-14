@@ -15,7 +15,7 @@ export function defaultConfig(cwd = process.cwd()) {
     maxHistoryChars: 6000,
     testCommand: "npm test",
     agents: [
-      { id: "codex", name: "Codex", command: "codex", mode: "turn", args: ["exec", "--color", "never", "-"], cwd },
+      { id: "codex", name: "Codex", command: "codex", mode: "turn", args: defaultCodexTurnArgs(), cwd },
       { id: "claude", name: "Claude", command: "claude", mode: "turn", args: ["--print", "--output-format", "text"], cwd }
     ]
   };
@@ -239,7 +239,11 @@ function modelEnvName(id) {
 function normalizedArgs(agent, id, mode) {
   const args = Array.isArray(agent.args) ? agent.args.map(String) : [];
   if (mode !== "turn" || args.length > 0) return args;
-  if (id === "codex" || agent.command === "codex") return ["exec", "--color", "never", "-"];
+  if (id === "codex" || agent.command === "codex") return defaultCodexTurnArgs();
   if (id === "claude" || agent.command === "claude") return ["--print", "--output-format", "text"];
   return args;
+}
+
+function defaultCodexTurnArgs() {
+  return ["exec", "--color", "never", "--skip-git-repo-check", "-"];
 }

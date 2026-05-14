@@ -114,7 +114,7 @@ export class AgentProcess extends EventEmitter {
       const output = cleanTurnOutput(stdout || stderr);
       if (output) this.emit("data", output);
       if (code !== 0) {
-        this.emit("data", `\n[agent-deck] ${this.agent.command} exited code=${code} signal=${signal || ""}\n`);
+        this.emit("error-output", `${this.agent.command} exited code=${code} signal=${signal || ""}`);
       }
       this.emit("turn-exit", { code, signal });
     });
@@ -130,11 +130,22 @@ export function cleanTerminalOutput(data) {
 }
 
 export function cleanTurnOutput(data) {
-  return cleanTerminalOutput(data)
+  const output = extractCodexAnswer(cleanTerminalOutput(data));
+  return output
     .split("\n")
     .filter((line) => !isNoiseLine(line))
     .join("\n")
     .trim();
+}
+
+function extractCodexAnswer(data) {
+  const lines = String(data).split("\n");
+  const codexIndex = lines.lastIndexOf("codex");
+  if (codexIndex === -1) return data;
+
+  const endIndex = lines.findIndex((line, index) => index > codexIndex && line.trim() === "tokens used");
+  const answer = lines.slice(codexIndex + 1, endIndex === -1 ? undefined : endIndex).join("\n").trim();
+  return answer || data;
 }
 
 function isNoiseLine(line) {
@@ -148,6 +159,11 @@ function isNoiseLine(line) {
     /^\* .+ tokens?\)/i.test(text) ||
     /^\[Pasted text/i.test(text) ||
     /^OpenAI Codex\b/i.test(text) ||
+    /^[-]{5,}$/.test(text) ||
+    /^(workdir|model|provider|approval|sandbox|reasoning effort|reasoning summaries|session id):\b/i.test(text) ||
+    /^user$/i.test(text) ||
+    /^tokens used$/i.test(text) ||
+    /^[\d,]+$/.test(text) ||
     /^Tip: /i.test(text)
   );
 }

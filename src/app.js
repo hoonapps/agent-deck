@@ -179,8 +179,8 @@ class AgentDeckApp {
       const process = new AgentProcess(agent);
       this.agents.set(agent.id, process);
       process.on("data", (data) => this.appendAgentOutput(agent.id, data));
+      process.on("error-output", (message) => this.log(`${agent.name}: ${message}`));
       process.on("exit", ({ code, signal }) => {
-        this.appendAgentOutput(agent.id, `\n[agent-deck] exited code=${code} signal=${signal || ""}\n`);
         this.log(`${agent.name} exited (${code ?? signal ?? "unknown"})`);
       });
       if (agent.autoStart) process.start();

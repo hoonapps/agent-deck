@@ -76,6 +76,7 @@ test("normalizeAgent inserts codex model before stdin prompt marker", () => {
     "exec",
     "--color",
     "never",
+    "--skip-git-repo-check",
     "--model",
     "gpt-5.3-codex",
     "-"
@@ -112,5 +113,24 @@ test("cleanTurnOutput removes provider progress noise", () => {
   assert.equal(
     cleanTurnOutput("Working q\nThinking\n*Churned for 3s\n[Pasted text #2+306 lines]\n답변입니다\n* Honking... (3s · 5 tokens)\n"),
     "답변입니다"
+  );
+});
+
+test("cleanTurnOutput extracts only the codex final answer", () => {
+  assert.equal(
+    cleanTurnOutput(`OpenAI Codex v0.130.0
+--------
+workdir: /Users/example
+model: gpt-5.5
+provider: openai
+--------
+user
+하이
+codex
+하이. 무엇을 도와드릴까요?
+tokens used
+12,845
+하이. 무엇을 도와드릴까요?`),
+    "하이. 무엇을 도와드릴까요?"
   );
 });

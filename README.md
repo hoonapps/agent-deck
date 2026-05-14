@@ -151,7 +151,7 @@ Change a running agent from inside the TUI:
 For clean turn mode, leave `args` empty and Agent Deck will use the right default:
 
 ```text
-codex exec --color never -
+codex exec --color never --skip-git-repo-check -
 claude --print --output-format text
 ```
 
