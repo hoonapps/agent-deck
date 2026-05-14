@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shellCommand } from "../src/agent.js";
-import { normalizeAgent, parseComposerCommand, parseModelOverrides } from "../src/config.js";
+import { normalizeAgent, parseComposerCommand, parseModelOverrides, runtimeSetAgentModel } from "../src/config.js";
 
 test("parseComposerCommand treats plain text as a note for the active chat", () => {
   assert.deepEqual(parseComposerCommand("review this diff"), {
@@ -33,6 +33,12 @@ test("parseComposerCommand supports utility commands", () => {
     type: "clear",
     target: "all"
   });
+  assert.deepEqual(parseComposerCommand("/models"), { type: "models" });
+  assert.deepEqual(parseComposerCommand("/set-model codex gpt-5.3-codex"), {
+    type: "set-model",
+    target: "codex",
+    model: "gpt-5.3-codex"
+  });
 });
 
 test("normalizeAgent creates stable ids and cwd", () => {
@@ -41,6 +47,7 @@ test("normalizeAgent creates stable ids and cwd", () => {
     name: "Claude Code",
     command: "claude",
     args: [],
+    baseArgs: [],
     model: undefined,
     modelArg: "--model",
     bracketedPaste: true,
@@ -76,6 +83,13 @@ test("parseModelOverrides maps agent ids to models", () => {
     codex: "gpt-5.3-codex",
     claude: "sonnet"
   });
+});
+
+test("runtimeSetAgentModel updates model args from base args", () => {
+  const agent = normalizeAgent({ id: "codex", command: "codex", args: ["resume", "--last"] }, "/tmp/work", 0);
+  runtimeSetAgentModel(agent, "gpt-5.3-codex");
+  assert.equal(agent.label, "codex [gpt-5.3-codex]");
+  assert.deepEqual(agent.args, ["resume", "--last", "--model", "gpt-5.3-codex"]);
 });
 
 test("shellCommand preserves arguments with spaces and quotes", () => {

@@ -16,7 +16,7 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Show recent shared history in a live context panel
 - Optionally inject recent history into each routed message so another agent can join midstream
 - Run the configured test command without leaving the TUI
-- Set each agent model through config or `--model agent=model`
+- Set each agent model through config, environment variables, short launch flags, or `/set-model`
 - Configure agents per repository with `agent-deck.config.json`
 
 ## Install
@@ -47,10 +47,11 @@ Use a custom session name:
 agent-deck --session login-refactor
 ```
 
-Choose models at launch:
+Most users should save model defaults in `agent-deck.config.json` with `agent-deck init`. For one-off overrides, use either the generic flag or the short flags:
 
 ```bash
 agent-deck --model codex=gpt-5.3-codex --model claude=sonnet
+agent-deck --codex-model gpt-5.3-codex --claude-model sonnet
 ```
 
 Create a repo-local config:
@@ -81,6 +82,8 @@ agent-deck init
 | `/test [command]` | Run test command |
 | `/restart <agent>` | Restart one agent process |
 | `/clear <agent\|all>` | Clear output panes |
+| `/models` | Show current agent models |
+| `/set-model <agent> <model>` | Set a model and restart that agent |
 | `/exit-chat` | Leave the active agent chat |
 | `/help` | Show help |
 | `/quit` | Exit |
@@ -134,6 +137,29 @@ After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an
 ```
 
 Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
+
+Model precedence is:
+
+```text
+CLI flag > config model > AGENT_DECK_<AGENT>_MODEL > provider default
+```
+
+Useful environment variables:
+
+```bash
+export AGENT_DECK_CODEX_MODEL=gpt-5.3-codex
+export AGENT_DECK_CLAUDE_MODEL=sonnet
+```
+
+Change a running agent from inside the TUI:
+
+```text
+/models
+/set-model codex gpt-5.3-codex
+/set-model claude sonnet
+```
+
+Agent Deck intentionally does not use `/model` as its own command. If you are inside `/co` or `/cl`, `/model` is forwarded to the underlying agent.
 
 To preserve existing CLI session commands, keep them in `args`:
 

@@ -14,7 +14,8 @@ function printHelp() {
 Local TUI workspace for coordinating Codex, Claude, shell, git, and tests.
 
 Usage:
-  agent-deck [--config agent-deck.config.json] [--session name] [--model codex=gpt-5.3-codex] [--model claude=sonnet]
+  agent-deck [--config agent-deck.config.json] [--session name]
+             [--model codex=gpt-5.3-codex] [--codex-model gpt-5.3-codex] [--claude-model sonnet]
   agent-deck doctor
   agent-deck init
 
@@ -33,6 +34,8 @@ Composer commands:
   /test [command]         Run test command in the activity panel
   /restart <agent>        Restart one agent process
   /clear <agent|all>      Clear output
+  /models                 List current agent models
+  /set-model <agent> <m>  Set a model and restart that agent
   /exit-chat              Leave the current agent chat
   /help                   Show command help
 
@@ -57,7 +60,7 @@ function valuesAfter(flag) {
 async function doctor() {
   const config = loadConfig({
     configPath: valueAfter("--config"),
-    modelOverrides: parseModelOverrides(valuesAfter("--model")),
+    modelOverrides: cliModelOverrides(),
     cwd: process.cwd()
   });
   console.log(`Workspace: ${config.workspace}`);
@@ -88,8 +91,8 @@ function initConfig() {
         shareHistory: true,
         maxHistoryChars: 6000,
         agents: [
-          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", model: "", args: [] },
-          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", model: "", args: [] }
+          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", model: "gpt-5.3-codex", args: [] },
+          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", model: "sonnet", args: [] }
         ]
       },
       null,
@@ -109,8 +112,21 @@ if (args.includes("-h") || args.includes("--help")) {
   const config = loadConfig({
     configPath: valueAfter("--config"),
     sessionName: valueAfter("--session"),
-    modelOverrides: parseModelOverrides(valuesAfter("--model")),
+    modelOverrides: cliModelOverrides(),
     cwd: process.cwd()
   });
   createApp(config).start();
+}
+
+function cliModelOverrides() {
+  return {
+    ...parseModelOverrides(valuesAfter("--model")),
+    ...singleModelOverride("codex", "--codex-model"),
+    ...singleModelOverride("claude", "--claude-model")
+  };
+}
+
+function singleModelOverride(agent, flag) {
+  const model = valueAfter(flag);
+  return model ? { [agent]: model } : {};
 }

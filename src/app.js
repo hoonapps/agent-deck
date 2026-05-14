@@ -1,6 +1,6 @@
 import blessed from "blessed";
 import { AgentProcess } from "./agent.js";
-import { parseComposerCommand } from "./config.js";
+import { parseComposerCommand, runtimeSetAgentModel } from "./config.js";
 import { gitSummary, runCommand } from "./git.js";
 import { Transcript } from "./transcript.js";
 
@@ -14,6 +14,9 @@ const HELP_TEXT = `Commands:
 /test [command]         run tests
 /restart <agent>        restart an agent
 /clear <agent|all>      clear output
+/models                 list current agent models
+/set-model <agent> <model>
+                        set an agent model and restart it
 /exit-chat              leave the current agent chat
 /quit                   exit`;
 
@@ -211,6 +214,10 @@ class AgentDeckApp {
       this.restart(command.target);
     } else if (command.type === "clear") {
       this.clear(command.target);
+    } else if (command.type === "models") {
+      this.listModels();
+    } else if (command.type === "set-model") {
+      this.setModel(command.target, command.model);
     } else if (command.type === "exit-chat") {
       this.updateActiveAgent(null);
       this.log("Left agent chat. Use /co or /cl to route messages.");
@@ -271,6 +278,27 @@ class AgentDeckApp {
     }
     this.agentProcess(agent.id)?.restart();
     this.log(`Restarted ${agent.name}`);
+  }
+
+  setModel(target, model) {
+    const agent = this.findAgent(target);
+    if (!agent || !model) {
+      this.log("Usage: /set-model <agent> <model>");
+      return;
+    }
+    runtimeSetAgentModel(agent, model);
+    this.boxes.get(agent.id)?.setLabel(` ${agent.label} `);
+    this.agentProcess(agent.id)?.restart();
+    this.log(`Set ${agent.name} model to ${agent.model}. Restarted ${agent.id}.`);
+    this.render();
+  }
+
+  listModels() {
+    const rows = this.config.agents.map((agent) => {
+      const aliases = agent.aliases.map((alias) => `/${alias}`).join(", ");
+      return `${agent.id.padEnd(10)} ${agent.model || "(default)"}  ${aliases}`;
+    });
+    this.log(`Models:\n${rows.join("\n")}`);
   }
 
   clear(target) {

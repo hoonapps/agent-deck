@@ -29,7 +29,7 @@ export function loadConfig({ configPath, sessionName, modelOverrides = {}, cwd =
   const transcriptDir = resolve(workspace, userConfig.transcriptDir || defaults.transcriptDir);
   const agents = (userConfig.agents || defaults.agents).map((agent, index) => {
     const overrideId = normalizeId(agent.id || agent.name || `agent-${index + 1}`);
-    return normalizeAgent({ ...agent, model: modelOverrides[overrideId] ?? agent.model }, workspace, index);
+    return normalizeAgent({ ...agent, model: modelForAgent(agent, overrideId, modelOverrides) }, workspace, index);
   });
 
   return {
@@ -63,6 +63,7 @@ export function normalizeAgent(agent, workspace, index = 0) {
     label: model ? `${agent.name || id} [${model}]` : agent.name || id,
     command: agent.command,
     args: argsWithModel(rawArgs, model, agent.modelArg),
+    baseArgs: rawArgs,
     model,
     modelArg: agent.modelArg === false ? false : agent.modelArg || "--model",
     bracketedPaste: agent.bracketedPaste !== false,
@@ -100,6 +101,11 @@ export function parseComposerCommand(input, agentIds = []) {
       return { type: "restart", target: rest[0] };
     case "clear":
       return { type: "clear", target: rest[0] || "current" };
+    case "models":
+      return { type: "models" };
+    case "set-model":
+    case "use-model":
+      return { type: "set-model", target: rest[0], model: rest.slice(1).join(" ") };
     case "exit-chat":
     case "route-off":
       return { type: "exit-chat" };
@@ -194,6 +200,14 @@ export function parseModelOverrides(values = []) {
   return overrides;
 }
 
+export function runtimeSetAgentModel(agent, model) {
+  const normalizedModel = typeof model === "string" && model.trim() ? model.trim() : undefined;
+  agent.model = normalizedModel;
+  agent.args = argsWithModel(agent.baseArgs || [], normalizedModel, agent.modelArg);
+  agent.label = normalizedModel ? `${agent.name} [${normalizedModel}]` : agent.name;
+  return agent;
+}
+
 function argsWithModel(args, model, modelArg = "--model") {
   if (!model || modelArg === false || hasModelArg(args)) return args;
   return [...args, modelArg || "--model", model];
@@ -205,4 +219,14 @@ function hasModelArg(args) {
 
 export function packageRoot() {
   return dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
+function modelForAgent(agent, id, overrides) {
+  if (Object.hasOwn(overrides, id)) return overrides[id];
+  if (typeof agent.model === "string" && agent.model.trim()) return agent.model.trim();
+  return process.env[modelEnvName(id)] || undefined;
+}
+
+function modelEnvName(id) {
+  return `AGENT_DECK_${id.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_MODEL`;
 }
