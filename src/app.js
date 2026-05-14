@@ -70,7 +70,7 @@ class AgentDeckApp {
     this.screen.append(this.header);
 
     const screenHeight = this.screen.height || 40;
-    const bottomPanelHeight = Math.min(9, Math.max(6, Math.floor(screenHeight * 0.18)));
+    const bottomPanelHeight = Math.min(6, Math.max(4, Math.floor(screenHeight * 0.12)));
     const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - 4);
     this.grid = blessed.layout({
       top: 1,
@@ -113,7 +113,7 @@ class AgentDeckApp {
       border: "line",
       scrollable: true,
       alwaysScroll: true,
-      tags: false,
+      tags: true,
       mouse: true,
       style: { border: { fg: "gray" } }
     });
@@ -179,6 +179,11 @@ class AgentDeckApp {
       const process = new AgentProcess(agent);
       this.agents.set(agent.id, process);
       process.on("data", (data) => this.appendAgentOutput(agent.id, data));
+      process.on("turn-start", () => this.appendAgentMeta(agent.id, "Working..."));
+      process.on("turn-exit", ({ code, durationMs }) => {
+        const status = code === 0 ? "done" : `failed (${code})`;
+        this.appendAgentMeta(agent.id, `Worked for ${formatDuration(durationMs)} - ${status}`);
+      });
       process.on("error-output", (message) => this.log(`${agent.name}: ${message}`));
       process.on("exit", ({ code, signal }) => {
         this.log(`${agent.name} exited (${code ?? signal ?? "unknown"})`);
@@ -359,6 +364,15 @@ class AgentDeckApp {
     this.render();
   }
 
+  appendAgentMeta(agentId, message) {
+    const box = this.boxes.get(agentId);
+    if (!box) return;
+    box.pushLine(`[${message}]`);
+    box.pushLine("");
+    box.setScrollPerc(100);
+    this.render();
+  }
+
   appendUserMessage(agentId, message) {
     const box = this.boxes.get(agentId);
     if (!box) return;
@@ -466,4 +480,9 @@ function formatPaneMessage(label, message) {
   const text = String(message).trim();
   if (!text) return `${label}:`;
   return `${label}:\n${text}`;
+}
+
+function formatDuration(ms = 0) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
 }

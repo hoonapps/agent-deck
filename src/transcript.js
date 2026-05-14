@@ -45,7 +45,7 @@ export class Transcript {
 
   panelText(maxChars = 5000) {
     const context = fitToMaxChars(this.entries.map(formatPanelEntry).join("\n\n"), maxChars);
-    return [`Transcript file: ${this.path}`, "", context || "(No conversation history yet.)"].join("\n");
+    return [`{gray-fg}Transcript file: ${escapeTags(this.path)}{/gray-fg}`, "", context || "(No conversation history yet.)"].join("\n");
   }
 }
 
@@ -67,6 +67,24 @@ function fitToMaxChars(value, maxChars) {
 }
 
 function formatPanelEntry(entry) {
-  const source = entry.source.replace(/^input -> /, "You -> ").replace(/^output <- /, "");
-  return `${source}\n${truncate(entry.message, 900)}`;
+  const { label, color } = panelLabel(entry.source);
+  return [
+    "{gray-fg}--------------------------------{/gray-fg}",
+    `{${color}-fg}${label}{/${color}-fg}`,
+    escapeTags(truncate(entry.message, 900))
+  ].join("\n");
+}
+
+function panelLabel(source) {
+  if (source.startsWith("input -> ")) {
+    return { label: `YOU -> ${source.replace("input -> ", "").toUpperCase()}`, color: "cyan" };
+  }
+  const agent = source.replace(/^output <- /, "").toUpperCase();
+  if (agent.includes("CODEX")) return { label: "CODEX", color: "green" };
+  if (agent.includes("CLAUDE")) return { label: "CLAUDE", color: "magenta" };
+  return { label: agent, color: "yellow" };
+}
+
+function escapeTags(value) {
+  return String(value).replace(/[{}]/g, "");
 }

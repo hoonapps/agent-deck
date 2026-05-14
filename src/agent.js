@@ -89,7 +89,9 @@ export class AgentProcess extends EventEmitter {
       this.emit("data", "[agent-deck] turn already running\n");
       return;
     }
+    const startedAt = Date.now();
     this.started = true;
+    this.emit("turn-start", { startedAt });
     const child = spawn(this.agent.command, this.agent.args, {
       cwd: this.agent.cwd,
       env: { ...process.env, ...this.agent.env, TERM: "xterm-256color" },
@@ -107,7 +109,7 @@ export class AgentProcess extends EventEmitter {
     child.on("error", (error) => {
       this.child = null;
       this.emit("data", `Failed to start ${this.agent.command}: ${error.message}\n`);
-      this.emit("exit", { code: 1, signal: null });
+      this.emit("exit", { code: 1, signal: null, durationMs: Date.now() - startedAt });
     });
     child.on("close", (code, signal) => {
       this.child = null;
@@ -116,7 +118,7 @@ export class AgentProcess extends EventEmitter {
       if (code !== 0) {
         this.emit("error-output", `${this.agent.command} exited code=${code} signal=${signal || ""}`);
       }
-      this.emit("turn-exit", { code, signal });
+      this.emit("turn-exit", { code, signal, durationMs: Date.now() - startedAt });
     });
     child.stdin.end(String(text));
   }
