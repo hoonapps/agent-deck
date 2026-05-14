@@ -1,0 +1,41 @@
+{
+  "name": "agent-deck",
+  "version": "0.1.0",
+  "description": "Local TUI workspace for coordinating multiple AI coding agents.",
+  "type": "module",
+  "bin": {
+    "agent-deck": "./bin/agent-deck.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node ./bin/agent-deck.js",
+    "doctor": "node ./bin/agent-deck.js doctor",
+    "test": "node --test",
+    "lint": "node --check ./bin/agent-deck.js && node --check ./src/*.js"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "codex",
+    "claude",
+    "cli",
+    "tui",
+    "terminal"
+  ],
+  "author": "hoonapps",
+  "license": "MIT",
+  "dependencies": {
+    "blessed": "^0.1.81",
+    "node-pty": "^1.2.0-beta.13",
+    "strip-ansi": "^7.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

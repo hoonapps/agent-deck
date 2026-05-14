@@ -1,0 +1,18 @@
+{
+  "title": "Agent Deck",
+  "testCommand": "npm test",
+  "agents": [
+    {
+      "id": "codex",
+      "name": "Codex",
+      "command": "codex",
+      "args": []
+    },
+    {
+      "id": "claude",
+      "name": "Claude",
+      "command": "claude",
+      "args": []
+    }
+  ]
+}

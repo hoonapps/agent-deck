@@ -1,0 +1,24 @@
+{
+  "title": "Agent Deck Demo",
+  "testCommand": "npm test",
+  "agents": [
+    {
+      "id": "echo-a",
+      "name": "Echo A",
+      "command": "node",
+      "args": [
+        "-e",
+        "console.log('Echo A ready'); process.stdin.on('data', d => process.stdout.write('A> ' + d))"
+      ]
+    },
+    {
+      "id": "echo-b",
+      "name": "Echo B",
+      "command": "node",
+      "args": [
+        "-e",
+        "console.log('Echo B ready'); process.stdin.on('data', d => process.stdout.write('B> ' + d))"
+      ]
+    }
+  ]
+}

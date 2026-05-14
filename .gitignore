@@ -1,0 +1,6 @@
+node_modules/
+.agent-deck/
+coverage/
+dist/
+.DS_Store
+*.log
