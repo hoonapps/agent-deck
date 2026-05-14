@@ -44,7 +44,12 @@ export class AgentProcess extends EventEmitter {
       this.emit("data", "\n[agent-deck] process is not running. Use /restart to start it again.\n");
       return;
     }
-    this.pty.write(`${text}\r`);
+    const value = String(text);
+    if (this.agent.bracketedPaste && value.includes("\n")) {
+      this.pty.write(`\x1b[200~${value}\x1b[201~\r`);
+    } else {
+      this.pty.write(`${value}\r`);
+    }
   }
 
   writeRaw(input) {

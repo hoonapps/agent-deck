@@ -1,18 +1,22 @@
 # Agent Deck
 
-Agent Deck is a local TUI workspace for coordinating multiple AI coding agents from one terminal. It runs existing CLIs such as Codex and Claude side by side, routes prompts to one or all agents, keeps a Markdown transcript, and shows git/test context in the same screen.
+Agent Deck is a local TUI workspace for coordinating multiple AI coding agents from one terminal. It runs existing CLIs such as Codex and Claude side by side, routes prompts by chat command, keeps a Markdown transcript, and can inject recent shared history into the next agent turn.
 
 ## Why
 
-AI coding agents are useful, but real workflows often need a human to copy context between separate terminals. Agent Deck keeps those agent channels, git state, test output, and session notes in one local workspace.
+AI coding agents are useful, but real workflows often need a human to copy context between separate terminals. Agent Deck keeps those agent channels, test output, and shared session history in one local workspace.
 
 ## Features
 
 - Run multiple interactive CLI agents in panes
-- Send a prompt to the selected agent, a named agent, or every agent
+- Enter an agent chat with `/co` or `/cl`, then send plain messages there
+- Forward agent-native slash commands such as `/resume`, `/help`, or `/model` while inside that chat
+- Send a prompt to one named agent or every agent
 - Keep a timestamped Markdown transcript under `.agent-deck/sessions`
-- Show `git status --short` and `git diff --stat` in a live context panel
+- Show recent shared history in a live context panel
+- Optionally inject recent history into each routed message so another agent can join midstream
 - Run the configured test command without leaving the TUI
+- Set each agent model through config or `--model agent=model`
 - Configure agents per repository with `agent-deck.config.json`
 
 ## Install
@@ -43,6 +47,12 @@ Use a custom session name:
 agent-deck --session login-refactor
 ```
 
+Choose models at launch:
+
+```bash
+agent-deck --model codex=gpt-5.3-codex --model claude=sonnet
+```
+
 Create a repo-local config:
 
 ```bash
@@ -53,27 +63,44 @@ agent-deck init
 
 | Key | Action |
 | --- | --- |
-| `F1`, `F2`, ... | Select an agent target |
-| `F8` | Refresh git diff panel |
+| `F8` | Refresh history panel |
 | `F10` | Run configured test command |
-| `Ctrl+X` | Stop selected agent process |
+| `Ctrl+X` | Stop active agent process |
 | `Ctrl+C` | Quit |
 
 ## Composer Commands
 
 | Command | Action |
 | --- | --- |
+| `/co [message]` | Enter Codex chat or send to Codex |
+| `/cl [message]` | Enter Claude chat or send to Claude |
 | `/all <message>` | Send to every running agent |
-| `/to <agent> <message>` | Send to one agent |
-| `/focus <agent>` | Change active target |
-| `/diff` | Refresh git panel |
+| `/to <agent> <message>` | Send to one agent and enter that chat |
+| `/git` | Show git status in Activity |
+| `/history` | Refresh history panel |
 | `/test [command]` | Run test command |
 | `/restart <agent>` | Restart one agent process |
 | `/clear <agent\|all>` | Clear output panes |
+| `/exit-chat` | Leave the active agent chat |
 | `/help` | Show help |
 | `/quit` | Exit |
 
-Plain text is sent to the currently selected agent.
+Plain text is sent to the active agent chat. There is no active chat at startup, so accidental text is not sent anywhere until you route with `/co`, `/cl`, or `/to`.
+
+Agent-native slash commands are preserved. For example:
+
+```text
+/co
+/resume
+/model
+```
+
+After `/co`, the `/resume` and `/model` lines are forwarded to Codex. To send an agent slash command without entering a chat first, put it behind a route:
+
+```text
+/to claude /help
+/codex /resume
+```
 
 ## Configuration
 
@@ -83,24 +110,50 @@ Plain text is sent to the currently selected agent.
 {
   "title": "Agent Deck",
   "testCommand": "npm test",
+  "shareHistory": true,
+  "maxHistoryChars": 6000,
   "agents": [
     {
       "id": "codex",
+      "aliases": ["co"],
       "name": "Codex",
       "command": "codex",
+      "model": "gpt-5.3-codex",
       "args": []
     },
     {
       "id": "claude",
+      "aliases": ["cl"],
       "name": "Claude",
       "command": "claude",
+      "model": "sonnet",
       "args": []
     }
   ]
 }
 ```
 
-Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, and `autoStart: false` per agent.
+Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
+
+To preserve existing CLI session commands, keep them in `args`:
+
+```json
+{
+  "id": "codex",
+  "command": "codex",
+  "args": ["resume", "--last"],
+  "model": "gpt-5.3-codex"
+}
+```
+
+```json
+{
+  "id": "claude",
+  "command": "claude",
+  "args": ["--resume"],
+  "model": "sonnet"
+}
+```
 
 ## Development
 

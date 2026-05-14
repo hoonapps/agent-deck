@@ -1,17 +1,23 @@
 {
   "title": "Agent Deck",
   "testCommand": "npm test",
+  "shareHistory": true,
+  "maxHistoryChars": 6000,
   "agents": [
     {
       "id": "codex",
+      "aliases": ["co"],
       "name": "Codex",
       "command": "codex",
+      "model": "",
       "args": []
     },
     {
       "id": "claude",
+      "aliases": ["cl"],
       "name": "Claude",
       "command": "claude",
+      "model": "",
       "args": []
     }
   ]

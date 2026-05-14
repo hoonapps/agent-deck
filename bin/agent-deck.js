@@ -4,7 +4,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { createApp } from "../src/app.js";
-import { findExecutable, loadConfig } from "../src/config.js";
+import { findExecutable, loadConfig, parseModelOverrides } from "../src/config.js";
 
 const args = process.argv.slice(2);
 
@@ -14,26 +14,30 @@ function printHelp() {
 Local TUI workspace for coordinating Codex, Claude, shell, git, and tests.
 
 Usage:
-  agent-deck [--config agent-deck.config.json] [--session name]
+  agent-deck [--config agent-deck.config.json] [--session name] [--model codex=gpt-5.3-codex] [--model claude=sonnet]
   agent-deck doctor
   agent-deck init
 
 Shortcuts:
-  F1/F2/...     Select agent target
-  F8           Refresh git diff
+  F8           Refresh history panel
   F10          Run configured test command
   Ctrl+X       Stop selected agent
   Ctrl+C       Quit
 
 Composer commands:
+  /co [msg]               Enter Codex chat or send to Codex
+  /cl [msg]               Enter Claude chat or send to Claude
   /all <msg>              Send a message to every running agent
-  /to <agent> <msg>       Send a message to one agent
-  /focus <agent>          Change active target
-  /diff                   Refresh git diff panel
+  /to <agent> <msg>       Send a message to one agent and enter that chat
+  /git                    Show git status in Activity
   /test [command]         Run test command in the activity panel
   /restart <agent>        Restart one agent process
   /clear <agent|all>      Clear output
+  /exit-chat              Leave the current agent chat
   /help                   Show command help
+
+While inside an agent chat, unknown slash commands are forwarded to that agent.
+For example: /co, then /resume or /model is sent to Codex.
 `);
 }
 
@@ -42,14 +46,27 @@ function valueAfter(flag) {
   return index >= 0 ? args[index + 1] : undefined;
 }
 
+function valuesAfter(flag) {
+  const values = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === flag && args[index + 1]) values.push(args[index + 1]);
+  }
+  return values;
+}
+
 async function doctor() {
-  const config = loadConfig({ configPath: valueAfter("--config"), cwd: process.cwd() });
+  const config = loadConfig({
+    configPath: valueAfter("--config"),
+    modelOverrides: parseModelOverrides(valuesAfter("--model")),
+    cwd: process.cwd()
+  });
   console.log(`Workspace: ${config.workspace}`);
   console.log(`Transcript dir: ${config.transcriptDir}`);
   console.log("");
   for (const agent of config.agents) {
     const found = await findExecutable(agent.command);
-    console.log(`${found ? "✓" : "✕"} ${agent.id}: ${agent.command}${found ? ` (${found})` : " (not found)"}`);
+    const model = agent.model ? ` model=${agent.model}` : "";
+    console.log(`${found ? "✓" : "✕"} ${agent.id}: ${agent.command}${model}${found ? ` (${found})` : " (not found)"}`);
   }
   console.log("");
   console.log(`Test command: ${config.testCommand || "(none)"}`);
@@ -68,9 +85,11 @@ function initConfig() {
       {
         title: "Agent Deck",
         testCommand: "npm test",
+        shareHistory: true,
+        maxHistoryChars: 6000,
         agents: [
-          { id: "codex", name: "Codex", command: "codex", args: [] },
-          { id: "claude", name: "Claude", command: "claude", args: [] }
+          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", model: "", args: [] },
+          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", model: "", args: [] }
         ]
       },
       null,
@@ -90,6 +109,7 @@ if (args.includes("-h") || args.includes("--help")) {
   const config = loadConfig({
     configPath: valueAfter("--config"),
     sessionName: valueAfter("--session"),
+    modelOverrides: parseModelOverrides(valuesAfter("--model")),
     cwd: process.cwd()
   });
   createApp(config).start();

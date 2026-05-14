@@ -1,11 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { shellCommand } from "../src/agent.js";
-import { normalizeAgent, parseComposerCommand } from "../src/config.js";
+import { normalizeAgent, parseComposerCommand, parseModelOverrides } from "../src/config.js";
 
-test("parseComposerCommand sends plain text to selected target", () => {
+test("parseComposerCommand treats plain text as a note for the active chat", () => {
   assert.deepEqual(parseComposerCommand("review this diff"), {
-    type: "send",
+    type: "note",
     message: "review this diff"
   });
 });
@@ -23,7 +23,8 @@ test("parseComposerCommand supports routing commands", () => {
 });
 
 test("parseComposerCommand supports utility commands", () => {
-  assert.deepEqual(parseComposerCommand("/diff"), { type: "diff" });
+  assert.deepEqual(parseComposerCommand("/git"), { type: "git" });
+  assert.deepEqual(parseComposerCommand("/history"), { type: "history" });
   assert.deepEqual(parseComposerCommand("/test npm run lint"), {
     type: "test",
     command: "npm run lint"
@@ -40,9 +41,40 @@ test("normalizeAgent creates stable ids and cwd", () => {
     name: "Claude Code",
     command: "claude",
     args: [],
+    model: undefined,
+    modelArg: "--model",
+    bracketedPaste: true,
+    aliases: ["cl", "claude-code"],
+    label: "Claude Code",
     cwd: "/tmp/work",
     env: {},
     autoStart: true
+  });
+});
+
+test("normalizeAgent appends model args without removing resume args", () => {
+  assert.deepEqual(
+    normalizeAgent({ id: "claude", command: "claude", model: "sonnet", args: ["--resume"] }, "/tmp/work", 0).args,
+    ["--resume", "--model", "sonnet"]
+  );
+  assert.deepEqual(
+    normalizeAgent({ id: "codex", command: "codex", model: "gpt-5.3-codex", args: ["resume", "--last"] }, "/tmp/work", 0).args,
+    ["resume", "--last", "--model", "gpt-5.3-codex"]
+  );
+});
+
+test("normalizeAgent prefers configured aliases for display routing", () => {
+  assert.deepEqual(normalizeAgent({ id: "echo-a", aliases: ["ea"], command: "node" }, "/tmp/work", 0).aliases, [
+    "ea",
+    "ec",
+    "echo-a"
+  ]);
+});
+
+test("parseModelOverrides maps agent ids to models", () => {
+  assert.deepEqual(parseModelOverrides(["codex=gpt-5.3-codex,claude=sonnet"]), {
+    codex: "gpt-5.3-codex",
+    claude: "sonnet"
   });
 });
 

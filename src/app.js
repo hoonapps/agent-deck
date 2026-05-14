@@ -5,13 +5,16 @@ import { gitSummary, runCommand } from "./git.js";
 import { Transcript } from "./transcript.js";
 
 const HELP_TEXT = `Commands:
+/co [message]           enter Codex chat or send to Codex
+/cl [message]           enter Claude chat or send to Claude
 /all <message>          send to every agent
-/to <agent> <message>   send to one agent
-/focus <agent>          change active target
-/diff                   refresh git diff
+/to <agent> <message>   send to one agent and enter that chat
+/git                    show git status in Activity
+/history                refresh History panel
 /test [command]         run tests
 /restart <agent>        restart an agent
 /clear <agent|all>      clear output
+/exit-chat              leave the current agent chat
 /quit                   exit`;
 
 export function createApp(config) {
@@ -28,7 +31,7 @@ class AgentDeckApp {
     });
     this.agents = new Map();
     this.boxes = new Map();
-    this.selectedIndex = 0;
+    this.activeAgentId = null;
     this.activityLines = [];
   }
 
@@ -42,9 +45,9 @@ class AgentDeckApp {
     this.createLayout();
     this.bindKeys();
     this.startAgents();
-    this.refreshGit();
+    this.refreshHistory();
     this.log(`Session transcript: ${this.transcript.path}`);
-    this.log("Use F1/F2 to target an agent, /all to broadcast, F8 for diff, F10 for tests.");
+    this.log("Use /co or /cl to enter an agent chat. Agent slash commands are forwarded while in a chat.");
     this.input.focus();
     this.render();
   }
@@ -72,7 +75,7 @@ class AgentDeckApp {
 
     for (const agent of this.config.agents) {
       const box = blessed.box({
-        label: ` ${agent.name} `,
+        label: ` ${agent.label} `,
         width: `${100 / this.config.agents.length}%`,
         height: "100%",
         border: "line",
@@ -93,12 +96,12 @@ class AgentDeckApp {
     }
 
     const bottomTop = 1 + gridHeight;
-    this.diffBox = blessed.box({
+    this.historyBox = blessed.box({
       top: bottomTop,
       left: 0,
       width: "50%",
       bottom: 3,
-      label: " Git ",
+      label: " History ",
       border: "line",
       scrollable: true,
       alwaysScroll: true,
@@ -106,7 +109,7 @@ class AgentDeckApp {
       mouse: true,
       style: { border: { fg: "gray" } }
     });
-    this.screen.append(this.diffBox);
+    this.screen.append(this.historyBox);
 
     this.activityBox = blessed.box({
       top: bottomTop,
@@ -147,18 +150,14 @@ class AgentDeckApp {
 
   bindKeys() {
     this.screen.key(["C-c"], () => this.shutdown());
-    this.screen.key(["f8"], () => this.refreshGit());
+    this.screen.key(["f8"], () => this.refreshHistory());
     this.screen.key(["f10"], () => this.runTest());
     this.screen.key(["C-x"], () => {
-      const selected = this.selectedAgent();
+      const selected = this.activeAgent();
       if (selected) {
         this.agentProcess(selected.id)?.stop();
         this.log(`Stopped ${selected.id}`);
       }
-    });
-
-    this.config.agents.forEach((agent, index) => {
-      this.screen.key(`f${index + 1}`, () => this.selectAgent(index));
     });
 
     this.screen.on("resize", () => {
@@ -178,45 +177,62 @@ class AgentDeckApp {
       });
       if (agent.autoStart) process.start();
     }
-    this.selectAgent(0);
+    this.updateActiveAgent(null);
   }
 
   handleInput(value) {
     if (!value.trim()) return;
+    const directRoute = this.parseAgentRoute(value);
+    if (directRoute) {
+      this.updateActiveAgent(directRoute.agent.id);
+      if (directRoute.message) {
+        this.sendTo(directRoute.agent.id, directRoute.message, { enterChat: true });
+      } else {
+        this.log(`Entered ${directRoute.agent.name} chat. Plain messages now go to ${directRoute.agent.id}.`);
+      }
+      return;
+    }
+
     const command = parseComposerCommand(value);
 
-    if (command.type === "send") {
-      this.sendToSelected(command.message);
+    if (command.type === "note") {
+      this.sendToActive(command.message);
     } else if (command.type === "send-all") {
       this.sendAll(command.message);
     } else if (command.type === "send-to") {
-      this.sendTo(command.target, command.message);
-    } else if (command.type === "focus") {
-      this.selectAgentById(command.target);
-    } else if (command.type === "diff") {
-      this.refreshGit();
+      this.sendTo(command.target, command.message, { enterChat: true });
+    } else if (command.type === "git") {
+      this.showGit();
+    } else if (command.type === "history") {
+      this.refreshHistory();
     } else if (command.type === "test") {
       this.runTest(command.command);
     } else if (command.type === "restart") {
       this.restart(command.target);
     } else if (command.type === "clear") {
       this.clear(command.target);
+    } else if (command.type === "exit-chat") {
+      this.updateActiveAgent(null);
+      this.log("Left agent chat. Use /co or /cl to route messages.");
     } else if (command.type === "help") {
       this.log(HELP_TEXT);
     } else if (command.type === "quit") {
       this.shutdown();
     } else {
-      this.log(`Unknown command: /${command.command}. Try /help.`);
+      this.handleUnknownSlash(value, command.command);
     }
   }
 
-  sendToSelected(message) {
-    const agent = this.selectedAgent();
-    if (!agent) return;
+  sendToActive(message) {
+    const agent = this.activeAgent();
+    if (!agent) {
+      this.log("No active agent chat. Use /co, /cl, or /to <agent> <message>.");
+      return;
+    }
     this.sendTo(agent.id, message);
   }
 
-  sendTo(target, message) {
+  sendTo(target, message, { enterChat = false } = {}) {
     if (!target || !message) {
       this.log("Usage: /to <agent> <message>");
       return;
@@ -226,8 +242,11 @@ class AgentDeckApp {
       this.log(`No agent named ${target}`);
       return;
     }
-    this.agentProcess(agent.id)?.writeLine(message);
+    if (enterChat) this.updateActiveAgent(agent.id);
+    const outbound = this.buildAgentMessage(agent, message);
+    this.agentProcess(agent.id)?.writeLine(outbound);
     this.transcript.input(agent.id, message);
+    this.refreshHistory();
     this.log(`Sent to ${agent.name}`);
   }
 
@@ -237,9 +256,10 @@ class AgentDeckApp {
       return;
     }
     for (const agent of this.config.agents) {
-      this.agentProcess(agent.id)?.writeLine(message);
+      this.agentProcess(agent.id)?.writeLine(this.buildAgentMessage(agent, message));
     }
     this.transcript.input("all", message);
+    this.refreshHistory();
     this.log("Broadcast sent to all agents");
   }
 
@@ -259,7 +279,7 @@ class AgentDeckApp {
       this.log("Cleared all agent panes");
       return;
     }
-    const agent = target === "current" ? this.selectedAgent() : this.findAgent(target);
+    const agent = target === "current" ? this.activeAgent() : this.findAgent(target);
     if (!agent) {
       this.log("Usage: /clear <agent|all>");
       return;
@@ -268,10 +288,14 @@ class AgentDeckApp {
     this.log(`Cleared ${agent.name}`);
   }
 
-  async refreshGit() {
-    this.diffBox?.setContent("Loading git status...");
+  refreshHistory() {
+    this.historyBox?.setContent(this.transcript.panelText(this.config.maxHistoryChars));
     this.render();
-    this.diffBox?.setContent(await gitSummary(this.config.workspace));
+  }
+
+  async showGit() {
+    this.log("Loading git status...");
+    this.log(await gitSummary(this.config.workspace));
     this.render();
   }
 
@@ -284,6 +308,7 @@ class AgentDeckApp {
     const result = await runCommand(command, this.config.workspace);
     this.log(`${command} ${result.ok ? "passed" : `failed (${result.code})`}\n${result.output || "(no output)"}`);
     this.transcript.event("test", `$ ${command}\n${result.output}`);
+    this.refreshHistory();
   }
 
   appendAgentOutput(agentId, data) {
@@ -292,6 +317,7 @@ class AgentDeckApp {
     box.pushLine(data.replace(/\n$/g, ""));
     box.setScrollPerc(100);
     this.transcript.output(agentId, data);
+    this.refreshHistory();
     this.render();
   }
 
@@ -304,32 +330,26 @@ class AgentDeckApp {
     this.render();
   }
 
-  selectAgent(index) {
-    if (index < 0 || index >= this.config.agents.length) return;
-    this.selectedIndex = index;
+  updateActiveAgent(agentId) {
+    this.activeAgentId = agentId;
     this.updateHeader();
     for (const [agentId, box] of this.boxes.entries()) {
-      const selected = this.selectedAgent()?.id === agentId;
+      const selected = this.activeAgentId === agentId;
       box.style.border.fg = selected ? "cyan" : "gray";
     }
     this.render();
   }
 
-  selectAgentById(id) {
-    const index = this.config.agents.findIndex((agent) => agent.id === id);
-    if (index === -1) {
-      this.log(`No agent named ${id}`);
-      return;
-    }
-    this.selectAgent(index);
-  }
-
-  selectedAgent() {
-    return this.config.agents[this.selectedIndex];
+  activeAgent() {
+    return this.findAgent(this.activeAgentId);
   }
 
   findAgent(id) {
-    return this.config.agents.find((agent) => agent.id === id || agent.name.toLowerCase() === String(id).toLowerCase());
+    if (!id) return null;
+    const value = String(id).toLowerCase();
+    return this.config.agents.find(
+      (agent) => agent.id === value || agent.name.toLowerCase() === value || agent.aliases.includes(value)
+    );
   }
 
   agentProcess(id) {
@@ -337,9 +357,40 @@ class AgentDeckApp {
   }
 
   updateHeader() {
-    const agent = this.selectedAgent();
-    const keys = this.config.agents.map((item, index) => `F${index + 1}:${item.id}`).join(" ");
-    this.header.setContent(` ${this.config.title} | target: ${agent?.id || "none"} | ${keys} | F8 diff | F10 test | Ctrl+C quit `);
+    const agent = this.activeAgent();
+    const routes = this.config.agents.map((item) => `/${item.aliases[0] || item.id}:${item.label}`).join(" ");
+    this.header.setContent(` ${this.config.title} | chat: ${agent?.id || "none"} | ${routes} | /all | /git | F10 test | Ctrl+C quit `);
+  }
+
+  parseAgentRoute(value) {
+    const match = value.trim().match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
+    if (!match) return null;
+    const agent = this.findAgent(match[1]);
+    if (!agent) return null;
+    return { agent, message: match[2] || "" };
+  }
+
+  handleUnknownSlash(raw, command) {
+    const agent = this.activeAgent();
+    if (agent) {
+      this.sendTo(agent.id, raw);
+      return;
+    }
+    this.log(`Unknown Agent Deck command: /${command}. Use /co or /cl first to send agent slash commands.`);
+  }
+
+  buildAgentMessage(agent, message) {
+    if (!this.config.shareHistory) return message;
+    const context = this.transcript.recentContext(this.config.maxHistoryChars);
+    if (!context) return message;
+    return [
+      "Agent Deck shared conversation history follows. Use it as context for this turn. Do not summarize it unless asked.",
+      "",
+      context,
+      "",
+      `Current message for ${agent.name}:`,
+      message
+    ].join("\n");
   }
 
   resizeAgents() {

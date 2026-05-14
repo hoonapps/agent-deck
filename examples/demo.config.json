@@ -1,11 +1,14 @@
 {
   "title": "Agent Deck Demo",
   "testCommand": "npm test",
+  "shareHistory": true,
   "agents": [
     {
       "id": "echo-a",
+      "aliases": ["ea"],
       "name": "Echo A",
       "command": "node",
+      "bracketedPaste": false,
       "args": [
         "-e",
         "console.log('Echo A ready'); process.stdin.on('data', d => process.stdout.write('A> ' + d))"
@@ -13,8 +16,10 @@
     },
     {
       "id": "echo-b",
+      "aliases": ["eb"],
       "name": "Echo B",
       "command": "node",
+      "bracketedPaste": false,
       "args": [
         "-e",
         "console.log('Echo B ready'); process.stdin.on('data', d => process.stdout.write('B> ' + d))"
