@@ -48,6 +48,44 @@ test("extractReviewFindings turns review output into table rows", () => {
   assert.equal(findings[1].severity, "medium");
 });
 
+test("extractReviewFindings prefers structured JSON blocks", () => {
+  const transcript = `# Agent Deck Session
+
+## 2026-06-16T00:01:00.000Z input -> review -> codex
+
+\`\`\`text
+리뷰 findings를 구조화해서 뽑아줘
+\`\`\`
+
+## 2026-06-16T00:02:00.000Z output <- codex
+
+\`\`\`text
+- Blocking: 이 문장은 fallback으로 중복 추출되면 안 됨
+
+AGENT_DECK_FINDINGS_JSON
+[
+  {
+    "severity": "blocker",
+    "file": "src/web.js",
+    "line": 44,
+    "summary": "dashboard export가 선택한 필터를 무시한다",
+    "evidence": "severity=high 요청에서도 medium finding이 포함된다"
+  }
+]
+END_AGENT_DECK_FINDINGS_JSON
+\`\`\`
+`;
+
+  const findings = extractReviewFindings(parseTranscriptEntries(transcript));
+
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].severity, "high");
+  assert.equal(findings[0].agent, "codex");
+  assert.equal(findings[0].location, "src/web.js:44");
+  assert.match(findings[0].summary, /필터를 무시/);
+  assert.match(findings[0].evidence, /severity=high/);
+});
+
 test("buildFindingsMarkdown writes a Markdown findings table", () => {
   const markdown = buildFindingsMarkdown(reviewTranscript, { sourcePath: "/tmp/session.md" });
 

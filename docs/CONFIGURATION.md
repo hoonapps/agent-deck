@@ -170,6 +170,25 @@ Use `/findings` after review turns to write a Markdown findings table:
 /findings review-table
 ```
 
+`/review` asks reviewer agents for an `AGENT_DECK_FINDINGS_JSON` block:
+
+```text
+AGENT_DECK_FINDINGS_JSON
+[
+  {
+    "severity": "high",
+    "location": "src/app.js:42",
+    "summary": "short actionable finding",
+    "evidence": "why this matters"
+  }
+]
+END_AGENT_DECK_FINDINGS_JSON
+```
+
+If that block is present, Agent Deck uses it before the older plain-text
+finding extraction. Supported severities are `high`, `medium`, `low`, and
+`info`; aliases such as `blocker` normalize to `high`.
+
 Use CLI transcript tools outside the TUI:
 
 ```bash

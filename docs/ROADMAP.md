@@ -10,7 +10,6 @@ This roadmap keeps the direction practical.
 - Better keyboard focus movement for three or more agent panes.
 - Confirmation prompts for destructive transcript actions.
 - Richer agent health display with timestamps and last stderr snippet.
-- Findings extraction that understands structured JSON review output.
 - Publish-ready session markers in the dashboard.
 
 ## Agent Runtime

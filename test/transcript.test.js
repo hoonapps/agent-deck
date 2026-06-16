@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Transcript } from "../src/transcript.js";
+import { parseTranscriptEntries } from "../src/transcript-tools.js";
 
 test("Transcript exports a session summary", () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-deck-transcript-"));
@@ -70,4 +71,22 @@ test("Transcript exports review findings", () => {
   assert.equal(result.count, 1);
   assert.match(result.path, /findings-session-review\.md$/);
   assert.match(content, /src\/app.js:10/);
+});
+
+test("Transcript preserves agent output that contains Markdown fences", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-transcript-"));
+  const transcript = new Transcript({
+    dir,
+    sessionName: "fenced-session",
+    config: { workspace: "/tmp/work" }
+  });
+
+  transcript.output("codex", "```js\nconsole.log('nested fence');\n```");
+
+  const content = readFileSync(transcript.path, "utf8");
+  const entries = parseTranscriptEntries(content);
+
+  assert.match(content, /````text/);
+  assert.equal(entries.length, 1);
+  assert.match(entries[0].message, /nested fence/);
 });

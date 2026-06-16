@@ -147,7 +147,14 @@ function formatRecord(record) {
 
 function fence(value) {
   const text = String(value).replace(/\n+$/g, "");
-  return `\`\`\`text\n${text}\n\`\`\`\n`;
+  const marker = fenceMarker(text);
+  return `${marker}text\n${text}\n${marker}\n`;
+}
+
+function fenceMarker(text) {
+  const runs = String(text).match(/`{3,}/g) || [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 2);
+  return "`".repeat(longest + 1);
 }
 
 function truncate(value, maxChars) {

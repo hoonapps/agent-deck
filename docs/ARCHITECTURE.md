@@ -100,6 +100,11 @@ and `agent-deck findings`. `/findings` uses the in-memory session entries to
 write a Markdown table from review outputs, while the CLI form works on saved
 transcript files after the session.
 
+Findings extraction first looks for structured `AGENT_DECK_FINDINGS_JSON`
+blocks, then falls back to plain-text heuristics. Transcript code fences expand
+when needed, so agent output can contain Markdown fences without breaking later
+replay or extraction.
+
 `agent-deck web` starts a local-only HTTP server. It renders saved sessions with
 the same parser, exposes small JSON endpoints for session data, and keeps file
 selection constrained to transcript basenames under the configured transcript

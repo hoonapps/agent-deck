@@ -373,7 +373,8 @@ class AgentDeckApp {
       "Review request:",
       message,
       "",
-      "Return findings first. Include file paths, line numbers, test gaps, and a short verdict."
+      "Return findings first. Include file paths, line numbers, test gaps, and a short verdict.",
+      "When there are findings, also include an AGENT_DECK_FINDINGS_JSON block with a JSON array of {severity, location, summary, evidence} objects."
     ].join("\n");
     for (const agent of targets) {
       this.appendUserMessage(agent.id, `/review ${message}`);

@@ -3,12 +3,12 @@ import { basename, join, resolve } from "node:path";
 
 export function parseTranscriptEntries(markdown) {
   const entries = [];
-  const pattern = /^## ([^\n]+?) ([^\n]+)\n\n```text\n([\s\S]*?)\n```/gm;
+  const pattern = /^## ([^\n]+?) ([^\n]+)\n\n(`{3,})text\n([\s\S]*?)\n\3/gm;
   for (const match of markdown.matchAll(pattern)) {
     entries.push({
       time: match[1],
       source: match[2],
-      message: match[3].trim()
+      message: match[4].trim()
     });
   }
   return entries;
@@ -114,6 +114,9 @@ export function formatFindingsMarkdown(findings, { sourcePath } = {}) {
 
 function extractFindingsFromOutput(entry, request) {
   const agent = entry.source.replace(/^output <- /, "");
+  const structured = extractStructuredFindings(entry.message, { agent, request });
+  if (structured.length) return structured;
+
   const lines = entry.message
     .split("\n")
     .map((line) => line.trim())
@@ -144,6 +147,54 @@ function findingFromLine(line, { agent, request }) {
   };
 }
 
+function extractStructuredFindings(message, { agent, request }) {
+  return structuredJsonBlocks(message)
+    .flatMap((block) => parseFindingsJson(block, { agent, request }))
+    .filter((finding) => finding.summary);
+}
+
+function structuredJsonBlocks(message) {
+  const blocks = [];
+  const markerPattern = /AGENT_DECK_FINDINGS_JSON\s*\n([\s\S]*?)\nEND_AGENT_DECK_FINDINGS_JSON/g;
+  for (const match of String(message).matchAll(markerPattern)) blocks.push(match[1].trim());
+
+  const fencePattern = /^(`{3,})(?:json\s+)?agent-deck-findings[^\n]*\n([\s\S]*?)\n\1$/gm;
+  for (const match of String(message).matchAll(fencePattern)) blocks.push(match[2].trim());
+
+  return blocks;
+}
+
+function parseFindingsJson(block, { agent, request }) {
+  try {
+    const parsed = JSON.parse(block);
+    const rows = Array.isArray(parsed) ? parsed : parsed?.findings;
+    if (!Array.isArray(rows)) return [];
+    return rows.map((row) => normalizeStructuredFinding(row, { agent, request })).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function normalizeStructuredFinding(row, { agent, request }) {
+  if (!row || typeof row !== "object") return null;
+  const summary = oneLine(row.summary || row.title || row.message || "", 240);
+  if (!summary) return null;
+  const evidence = oneLine(row.evidence || row.reason || row.details || "", 240);
+  return {
+    severity: normalizeSeverity(row.severity),
+    agent: oneLine(row.agent || agent, 80),
+    location: oneLine(row.location || formatStructuredLocation(row), 120),
+    summary,
+    evidence: evidence || (request ? `review: ${oneLine(request, 120)}` : "")
+  };
+}
+
+function formatStructuredLocation(row) {
+  const file = row.file || row.path;
+  if (!file) return "";
+  return row.line ? `${file}:${row.line}` : String(file);
+}
+
 function isReviewSource(source) {
   return source.startsWith("input -> review ->") || source === "input -> review";
 }
@@ -165,6 +216,15 @@ function inferSeverity(text) {
   if (/\b(blocker|blocking|critical|security|data loss|crash)\b/i.test(text)) return "high";
   if (/\b(regression|bug|broken|fail|error|missing test)\b/i.test(text)) return "medium";
   if (/\b(nit|minor|style)\b/i.test(text)) return "low";
+  return "info";
+}
+
+function normalizeSeverity(value) {
+  const severity = String(value || "").toLowerCase().trim();
+  if (["high", "medium", "low", "info"].includes(severity)) return severity;
+  if (["blocker", "blocking", "critical"].includes(severity)) return "high";
+  if (["major", "bug", "regression"].includes(severity)) return "medium";
+  if (["minor", "nit"].includes(severity)) return "low";
   return "info";
 }
 

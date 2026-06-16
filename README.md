@@ -101,6 +101,10 @@ Extract review findings into a Markdown table:
 agent-deck findings .agent-deck/sessions/session.md --out findings.md
 ```
 
+`/review` asks reviewer agents to include an `AGENT_DECK_FINDINGS_JSON` block.
+When that block is present, findings export uses it before falling back to
+plain-text extraction.
+
 Open the local web dashboard:
 
 ```bash

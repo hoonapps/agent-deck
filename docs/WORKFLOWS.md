@@ -107,6 +107,10 @@ agent-deck replay .agent-deck/sessions/session.md --limit 40
 agent-deck findings .agent-deck/sessions/session.md --out findings.md
 ```
 
+Structured `AGENT_DECK_FINDINGS_JSON` blocks are preferred over plain-text
+review parsing, so downloaded findings stay stable even when an agent writes a
+long explanation around them.
+
 - Open the dashboard when a session needs visual inspection:
 
 ```bash
