@@ -121,7 +121,9 @@ The review inbox is a derived read model over saved transcripts. It scans
 sessions for findings with `severity=high` and `status=open`, then renders those
 items above the selected session detail and through `GET /api/inbox`.
 The review trends panel uses the same read path and groups findings by
-location, agent, severity, and status without writing new state.
+location, agent, severity, and status without writing new state. It applies the
+same normalized query filters as session detail, so the trend panel and the
+selected session stay in the same review context.
 
 ## Safety Boundaries
 

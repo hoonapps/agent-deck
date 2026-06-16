@@ -35,7 +35,7 @@ async function handleDashboardRequest({ request, response, root, title }) {
     return;
   }
   if (url.pathname === "/api/trends") {
-    sendJson(response, reviewTrends(root));
+    sendJson(response, reviewTrends(root, filtersFromParams(url.searchParams)));
     return;
   }
   if (url.pathname === "/api/session-state" && request.method === "POST") {
@@ -100,7 +100,7 @@ export function dashboardModel({ transcriptDir, selectedName, filters = {} } = {
     sessions,
     selected: selected ? sessionDetails(root, selected.name, filters) : null,
     inbox: reviewInbox(root),
-    trends: reviewTrends(root),
+    trends: reviewTrends(root, filters),
     filters: normalizeFilters(filters)
   };
 }
@@ -129,7 +129,7 @@ function renderDashboard({ title, root, selectedName, filters }) {
       </div>
     </header>
     ${renderInbox(model.inbox)}
-    ${renderTrends(model.trends)}
+    ${renderTrends(model.trends, selected?.name)}
     <section class="layout">
       <aside class="sessions" aria-label="Sessions">
         <h2>Sessions</h2>
@@ -177,7 +177,7 @@ function renderInbox(inbox) {
   </section>`;
 }
 
-function renderTrends(trends) {
+function renderTrends(trends, selectedName) {
   const locationRows = trends.locations
     .slice(0, 6)
     .map(
@@ -202,6 +202,7 @@ function renderTrends(trends) {
         ${renderTrendPills("Agent", trends.agents)}
       </div>
     </div>
+    ${renderTrendFilters(trends, selectedName)}
     ${
       trends.total
         ? `<table>
@@ -211,6 +212,29 @@ function renderTrends(trends) {
         : "<p class=\"empty\">No review trends yet.</p>"
     }
   </section>`;
+}
+
+function renderTrendFilters(trends, selectedName) {
+  return `<form class="filters trend-filters" method="get" action="/">
+    ${selectedName ? `<input type="hidden" name="session" value="${escapeHtml(selectedName)}">` : ""}
+    <label>Severity
+      <select name="severity">
+        ${renderOptions(["all", ...trends.filterOptions.severities], trends.filters.severity)}
+      </select>
+    </label>
+    <label>Agent
+      <select name="agent">
+        ${renderOptions(["all", ...trends.filterOptions.agents], trends.filters.agent)}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        ${renderOptions(["all", ...FINDING_STATUSES], trends.filters.status)}
+      </select>
+    </label>
+    <button type="submit">Apply trend</button>
+    <a href="/?${queryString({ session: selectedName })}">Reset trend</a>
+  </form>`;
 }
 
 function renderTrendPills(label, items) {
@@ -405,16 +429,25 @@ function reviewInbox(root) {
   };
 }
 
-function reviewTrends(root) {
+function reviewTrends(root, filters = {}) {
   const sessions = sessionList(root);
-  const findings = allSessionFindings(root, sessions);
+  const allFindings = allSessionFindings(root, sessions);
+  const normalizedFilters = normalizeFilters(filters);
+  const findings = filterFindings(allFindings, normalizedFilters);
   return {
     total: findings.length,
-    sessions: sessions.length,
+    sessions: uniqueSorted(findings.map((finding) => finding.session)).length,
+    scannedSessions: sessions.length,
     locations: groupLocationTrends(findings),
     agents: groupCountTrends(findings, (finding) => finding.agent || "unknown"),
     severities: groupCountTrends(findings, (finding) => finding.severity || "unknown"),
-    statuses: groupCountTrends(findings, (finding) => finding.status || "open")
+    statuses: groupCountTrends(findings, (finding) => finding.status || "open"),
+    filters: normalizedFilters,
+    filterOptions: {
+      severities: uniqueSorted(allFindings.map((finding) => finding.severity)),
+      agents: uniqueSorted(allFindings.map((finding) => finding.agent)),
+      statuses: uniqueSorted(allFindings.map((finding) => finding.status))
+    }
   };
 }
 

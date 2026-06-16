@@ -86,11 +86,17 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.trends.locations[0].high, 2);
   assert.equal(model.trends.locations[0].sessions, 2);
   assert.equal(model.trends.severities.find((item) => item.label === "high")?.count, 2);
+  assert.equal(model.trends.scannedSessions, 2);
+  assert.equal(model.trends.filters.status, "all");
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
   assert.equal(filtered.selected.findings.length, 1);
   assert.equal(filtered.selected.findings[0].location, "src/app.js:12");
+  assert.equal(filtered.trends.total, 1);
+  assert.equal(filtered.trends.filters.severity, "high");
+  assert.equal(filtered.trends.filters.agent, "claude");
+  assert.equal(filtered.trends.agents[0].label, "claude");
 });
 
 test("startDashboard serves HTML and JSON APIs", async () => {
@@ -110,6 +116,8 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /2 open high findings/);
     assert.match(html, /Review Trends/);
     assert.match(html, /4 findings across 2 sessions/);
+    assert.match(html, /Apply trend/);
+    assert.match(html, /Reset trend/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
     assert.equal(sessions.length, 2);
@@ -131,10 +139,24 @@ test("startDashboard serves HTML and JSON APIs", async () => {
 
     const trends = await fetchJson(new URL("/api/trends", url));
     assert.equal(trends.total, 4);
+    assert.equal(trends.scannedSessions, 2);
     assert.equal(trends.locations[0].label, "src/app.js:12");
     assert.equal(trends.locations[0].open, 2);
     assert.equal(trends.locations[0].sessions, 2);
     assert.equal(trends.agents.find((item) => item.label === "codex")?.count, 3);
+
+    const codexOpenTrends = await fetchJson(new URL("/api/trends?agent=codex&status=open", url));
+    assert.equal(codexOpenTrends.total, 3);
+    assert.equal(codexOpenTrends.sessions, 2);
+    assert.equal(codexOpenTrends.filters.agent, "codex");
+    assert.equal(codexOpenTrends.filters.status, "open");
+    assert.equal(codexOpenTrends.agents.length, 1);
+    assert.equal(codexOpenTrends.agents[0].label, "codex");
+
+    const filteredHtml = await fetchText(new URL("/?session=review.md&agent=codex&status=open", url));
+    assert.match(filteredHtml, /3 findings across 2 sessions/);
+    assert.match(filteredHtml, /<option value="codex" selected>codex<\/option>/);
+    assert.match(filteredHtml, /<option value="open" selected>open<\/option>/);
 
     const filtered = await fetchJson(new URL("/api/session?file=review.md&severity=medium&agent=codex", url));
     assert.equal(filtered.findings.length, 1);
@@ -184,6 +206,16 @@ test("dashboard persists finding status markers", async () => {
 
     const inbox = await fetchJson(new URL("/api/inbox", url));
     assert.equal(inbox.count, 0);
+
+    const openTrends = await fetchJson(new URL("/api/trends?status=open", url));
+    assert.equal(openTrends.total, 1);
+    assert.equal(openTrends.statuses[0].label, "open");
+    assert.equal(openTrends.locations[0].label, "test/web.test.js");
+
+    const fixedTrends = await fetchJson(new URL("/api/trends?status=fixed", url));
+    assert.equal(fixedTrends.total, 1);
+    assert.equal(fixedTrends.statuses[0].label, "fixed");
+    assert.equal(fixedTrends.locations[0].label, "src/app.js:12");
 
     const fixedExport = await fetchText(new URL("/export/findings?file=review.md&status=fixed", url));
     assert.match(fixedExport, /src\/app\.js:12/);
