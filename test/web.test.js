@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dashboardModel, startDashboard } from "../src/web.js";
@@ -41,6 +41,7 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.selected.counts.outputs, 2);
   assert.equal(model.selected.allFindings.length, 2);
   assert.equal(model.selected.findings.length, 2);
+  assert.equal(model.selected.status, "draft");
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
@@ -58,13 +59,16 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /Agent Deck Web/);
     assert.match(html, /review\.md/);
     assert.match(html, /src\/app\.js:12/);
+    assert.match(html, /class="status draft"/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
     assert.equal(sessions[0].name, "review.md");
+    assert.equal(sessions[0].status, "draft");
 
     const session = await fetchJson(new URL("/api/session?file=..%2Freview.md", url));
     assert.equal(session.name, "review.md");
     assert.equal(session.findings.length, 2);
+    assert.equal(session.status, "draft");
     assert.equal("markdown" in session, false);
     assert.equal("path" in session, false);
 
@@ -84,6 +88,41 @@ test("startDashboard serves HTML and JSON APIs", async () => {
   }
 });
 
+test("dashboard persists publish status markers", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
+  writeFileSync(join(dir, "review.md"), sampleTranscript);
+
+  const { server, url } = await startDashboard({ transcriptDir: dir, title: "Agent Deck Web", port: 0 });
+  try {
+    const updated = await postJson(new URL("/api/session-state", url), {
+      file: "../review.md",
+      status: "published"
+    });
+
+    assert.equal(updated.name, "review.md");
+    assert.equal(updated.status, "published");
+    assert.match(updated.statusUpdatedAt, /^20/);
+    assert.equal("updatedAt" in updated, false);
+
+    const stateFile = readFileSync(join(dir, ".agent-deck-session-state.json"), "utf8");
+    assert.match(stateFile, /"review.md"/);
+    assert.match(stateFile, /"published"/);
+
+    const session = await fetchJson(new URL("/api/session?file=review.md", url));
+    assert.equal(session.status, "published");
+
+    const sessions = await fetchJson(new URL("/api/sessions", url));
+    assert.equal(sessions.length, 1);
+    assert.equal(sessions[0].status, "published");
+
+    const html = await fetchText(new URL("/?session=review.md", url));
+    assert.match(html, /class="status published"/);
+    assert.match(html, /class="marker published active"/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
 async function fetchText(url) {
   const response = await fetch(url);
   assert.equal(response.status, 200);
@@ -92,6 +131,16 @@ async function fetchText(url) {
 
 async function fetchJson(url) {
   const response = await fetch(url);
+  assert.equal(response.status, 200);
+  return response.json();
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload)
+  });
   assert.equal(response.status, 200);
   return response.json();
 }

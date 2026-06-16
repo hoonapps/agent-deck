@@ -112,8 +112,9 @@ directory.
 
 The dashboard uses query-string filters for severity and agent. Export links
 serve generated Markdown directly from the selected transcript instead of
-writing files automatically, so browsing remains read-only unless the user saves
-the downloaded artifact.
+writing files automatically. Session publish markers are the only dashboard
+write path; they are stored in `.agent-deck-session-state.json` under the
+transcript directory and leave transcript Markdown unchanged.
 
 ## Safety Boundaries
 

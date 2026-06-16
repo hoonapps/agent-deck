@@ -111,8 +111,9 @@ Open the local web dashboard:
 agent-deck web --port 4545
 ```
 
-The dashboard supports severity/agent filters and download links for findings
-Markdown and Korean blog drafts.
+The dashboard supports `draft`, `published`, and `deferred` session markers,
+severity/agent filters, and download links for findings Markdown and Korean
+blog drafts.
 
 Create a blog draft from an existing transcript:
 

@@ -1,44 +1,60 @@
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { URL } from "node:url";
 import { buildBlogDraftFromTranscript } from "./blog.js";
 import { buildReplay, extractReviewFindings, formatFindingsMarkdown, listTranscriptFiles, parseTranscriptEntries } from "./transcript-tools.js";
 
+const SESSION_STATE_FILE = ".agent-deck-session-state.json";
+const SESSION_STATUSES = ["draft", "published", "deferred"];
+
 export function createDashboardServer({ transcriptDir, title = "Agent Deck Dashboard" }) {
   const root = resolve(transcriptDir);
   return createServer((request, response) => {
-    try {
-      const url = new URL(request.url || "/", "http://agent-deck.local");
-      if (url.pathname === "/api/sessions") {
-        sendJson(response, sessionList(root));
-        return;
-      }
-      if (url.pathname === "/api/session") {
-        sendJson(response, publicSessionDetails(sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams))));
-        return;
-      }
-      if (url.pathname === "/export/findings") {
-        const session = sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams));
-        sendMarkdown(response, `${session?.name || "session"}-findings.md`, session ? formatFindingsMarkdown(session.findings, { sourcePath: session.path }) : "");
-        return;
-      }
-      if (url.pathname === "/export/blog") {
-        const session = sessionDetails(root, url.searchParams.get("file"));
-        sendMarkdown(response, `${session?.name || "session"}-blog-draft.md`, session ? buildBlogDraftFromTranscript(session.markdown, { title: titleFromSession(session.name), sourcePath: session.path }) : "");
-        return;
-      }
-      if (url.pathname === "/") {
-        sendHtml(response, renderDashboard({ title, root, selectedName: url.searchParams.get("session"), filters: filtersFromParams(url.searchParams) }));
-        return;
-      }
-      response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
-      response.end("Not found");
-    } catch (error) {
+    handleDashboardRequest({ request, response, root, title }).catch((error) => {
       response.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
       response.end(error.message);
-    }
+    });
   });
+}
+
+async function handleDashboardRequest({ request, response, root, title }) {
+  const url = new URL(request.url || "/", "http://agent-deck.local");
+  if (url.pathname === "/api/sessions") {
+    sendJson(response, sessionList(root));
+    return;
+  }
+  if (url.pathname === "/api/session") {
+    sendJson(response, publicSessionDetails(sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams))));
+    return;
+  }
+  if (url.pathname === "/api/session-state" && request.method === "POST") {
+    const payload = JSON.parse(await readRequestBody(request));
+    sendJson(response, updateSessionStatus(root, payload.file, payload.status));
+    return;
+  }
+  if (url.pathname === "/session-state" && request.method === "POST") {
+    const form = new URLSearchParams(await readRequestBody(request));
+    const session = updateSessionStatus(root, form.get("file"), form.get("status"));
+    redirect(response, `/?${queryString({ session: session.name, severity: form.get("severity"), agent: form.get("agent") })}`);
+    return;
+  }
+  if (url.pathname === "/export/findings") {
+    const session = sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams));
+    sendMarkdown(response, `${session?.name || "session"}-findings.md`, session ? formatFindingsMarkdown(session.findings, { sourcePath: session.path }) : "");
+    return;
+  }
+  if (url.pathname === "/export/blog") {
+    const session = sessionDetails(root, url.searchParams.get("file"));
+    sendMarkdown(response, `${session?.name || "session"}-blog-draft.md`, session ? buildBlogDraftFromTranscript(session.markdown, { title: titleFromSession(session.name), sourcePath: session.path }) : "");
+    return;
+  }
+  if (url.pathname === "/") {
+    sendHtml(response, renderDashboard({ title, root, selectedName: url.searchParams.get("session"), filters: filtersFromParams(url.searchParams) }));
+    return;
+  }
+  response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+  response.end("Not found");
 }
 
 export function startDashboard({ transcriptDir, title, host = "127.0.0.1", port = 4545 } = {}) {
@@ -111,6 +127,7 @@ function renderSessionLinks(sessions, selectedName, filters) {
       return `<a class="session${active}" href="/?${queryString({ ...filters, session: session.name })}">
         <strong>${escapeHtml(session.name)}</strong>
         <span>${escapeHtml(session.modifiedAt)} · ${session.size} bytes</span>
+        <span class="status ${escapeHtml(session.status)}">${escapeHtml(session.status)}</span>
       </a>`;
     })
     .join("");
@@ -124,6 +141,7 @@ function renderSessionDetail(session) {
         <h2>${escapeHtml(session.name)}</h2>
       </div>
       <div class="stats">
+        <span class="status ${escapeHtml(session.status)}">${escapeHtml(session.status)}</span>
         <span><strong>${session.counts.inputs}</strong> prompts</span>
         <span><strong>${session.counts.outputs}</strong> outputs</span>
         <span><strong>${session.findings.length}</strong>/<strong>${session.allFindings.length}</strong> findings</span>
@@ -131,6 +149,7 @@ function renderSessionDetail(session) {
     </div>
     <div class="actions">
       ${renderFilters(session)}
+      ${renderStatusForm(session)}
       <div class="downloads">
         <a href="/export/findings?${queryString({ file: session.name, severity: session.filters.severity, agent: session.filters.agent })}">Download findings</a>
         <a href="/export/blog?${queryString({ file: session.name })}">Download blog draft</a>
@@ -167,6 +186,19 @@ function renderFilters(session) {
   </form>`;
 }
 
+function renderStatusForm(session) {
+  return `<form class="markers" method="post" action="/session-state">
+    <input type="hidden" name="file" value="${escapeHtml(session.name)}">
+    <input type="hidden" name="severity" value="${escapeHtml(session.filters.severity)}">
+    <input type="hidden" name="agent" value="${escapeHtml(session.filters.agent)}">
+    <span>Session</span>
+    ${SESSION_STATUSES.map(
+      (status) =>
+        `<button type="submit" name="status" value="${status}" class="marker ${status}${session.status === status ? " active" : ""}">${status}</button>`
+    ).join("")}
+  </form>`;
+}
+
 function renderOptions(values, selected) {
   return values
     .map((value) => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`)
@@ -193,10 +225,13 @@ function renderFindings(findings) {
 }
 
 function sessionList(root) {
+  const state = readSessionState(root);
   return listTranscriptFiles(root).map((file) => ({
     name: file.name,
     size: file.size,
-    modifiedAt: file.modifiedAt.toISOString()
+    modifiedAt: file.modifiedAt.toISOString(),
+    status: state[file.name]?.status || "draft",
+    statusUpdatedAt: state[file.name]?.updatedAt || ""
   }));
 }
 
@@ -237,6 +272,55 @@ function publicSessionDetails(session) {
   return publicSession;
 }
 
+function updateSessionStatus(root, requestedName, requestedStatus) {
+  const safeName = basename(requestedName || "");
+  const status = normalizeSessionStatus(requestedStatus);
+  const sessions = sessionList(root);
+  const selected = sessions.find((session) => session.name === safeName);
+  if (!selected) throw new Error("Unknown session");
+  const state = readSessionState(root);
+  state[selected.name] = {
+    status,
+    updatedAt: new Date().toISOString()
+  };
+  writeSessionState(root, state);
+  return { ...selected, status, statusUpdatedAt: state[selected.name].updatedAt };
+}
+
+function readSessionState(root) {
+  const path = join(root, SESSION_STATE_FILE);
+  if (!existsSync(path)) return {};
+  try {
+    const parsed = JSON.parse(readFileSync(path, "utf8"));
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([name, value]) => [basename(name), normalizeSessionState(value)])
+        .filter(([, value]) => value)
+    );
+  } catch {
+    return {};
+  }
+}
+
+function writeSessionState(root, state) {
+  mkdirSync(root, { recursive: true });
+  writeFileSync(join(root, SESSION_STATE_FILE), `${JSON.stringify(state, null, 2)}\n`, "utf8");
+}
+
+function normalizeSessionState(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    status: normalizeSessionStatus(value.status),
+    updatedAt: String(value.updatedAt || "")
+  };
+}
+
+function normalizeSessionStatus(value) {
+  const status = String(value || "draft").toLowerCase().trim();
+  return SESSION_STATUSES.includes(status) ? status : "draft";
+}
+
 function selectSession(sessions, requestedName) {
   if (sessions.length === 0) return null;
   const safeName = requestedName ? basename(requestedName) : "";
@@ -259,6 +343,27 @@ function sendMarkdown(response, filename, value) {
     "content-disposition": `attachment; filename="${basename(filename)}"`
   });
   response.end(value || "");
+}
+
+function redirect(response, location) {
+  response.writeHead(303, { location });
+  response.end("");
+}
+
+function readRequestBody(request, maxBytes = 64 * 1024) {
+  return new Promise((resolveBody, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > maxBytes) {
+        reject(new Error("Request body too large"));
+        request.destroy();
+      }
+    });
+    request.on("end", () => resolveBody(body));
+    request.on("error", reject);
+  });
 }
 
 function filtersFromParams(params) {
@@ -309,7 +414,7 @@ function escapeHtml(value) {
 
 function dashboardCss() {
   return `
-    :root { color-scheme: dark; --bg: #101114; --panel: #171a1f; --line: #2b3139; --text: #f4f7fb; --muted: #9aa7b5; --accent: #38d5c8; --blue: #5ca8ff; --warn: #f5c451; --bad: #ff6b73; }
+    :root { color-scheme: dark; --bg: #101114; --panel: #171a1f; --line: #2b3139; --text: #f4f7fb; --muted: #9aa7b5; --accent: #38d5c8; --blue: #5ca8ff; --warn: #f5c451; --bad: #ff6b73; --ok: #60d394; --quiet: #778294; }
     * { box-sizing: border-box; }
     body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.55 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     .shell { max-width: 1440px; margin: 0 auto; padding: 24px; }
@@ -329,11 +434,18 @@ function dashboardCss() {
     .session span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
     .detail { padding: 18px; min-width: 0; }
     .actions { display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding: 14px 0; }
-    .filters, .downloads { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .filters, .downloads, .markers { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
     select, button, .downloads a, .filters a { border: 1px solid var(--line); background: #11151a; color: var(--text); padding: 7px 9px; text-decoration: none; font: inherit; }
     button { cursor: pointer; }
     .downloads a { color: var(--accent); }
+    .markers span { color: var(--muted); }
+    .marker.active { border-color: var(--accent); color: var(--accent); }
+    .status { display: inline-flex; width: fit-content; border: 1px solid var(--line); padding: 3px 7px; color: var(--quiet); text-transform: uppercase; letter-spacing: .05em; font-size: 11px; font-weight: 700; }
+    .status.published { color: var(--ok); }
+    .status.deferred { color: var(--warn); }
+    .marker.published.active { color: var(--ok); border-color: var(--ok); }
+    .marker.deferred.active { color: var(--warn); border-color: var(--warn); }
     .panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 18px; }
     .panes section { padding: 16px; overflow: auto; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d8e3f0; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

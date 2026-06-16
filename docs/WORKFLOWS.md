@@ -119,6 +119,8 @@ agent-deck web --port 4545
 
 Use the dashboard filters to narrow findings by severity or agent, then download
 the filtered findings table or a blog draft from the selected session.
+Mark sessions as `published` after they become posts, or `deferred` when they
+should stay in the archive but not enter the current publishing queue.
 
 - Generate a first blog draft when the session is worth publishing:
 
