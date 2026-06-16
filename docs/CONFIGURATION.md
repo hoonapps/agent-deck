@@ -71,6 +71,10 @@ command and can be started interactively before the cockpit opens. Use
 `--skip-preflight` for scripted launches and `--select-models` when you want to
 choose models before the TUI starts.
 
+`--select-models` accepts a listed number, `default` for the provider default,
+or a custom model name. Numeric input outside the listed range is rejected and
+the prompt is shown again.
+
 Model selection is resolved in this order:
 
 ```text

@@ -64,6 +64,10 @@ Most users should leave the provider default model at first. To choose models be
 agent-deck --select-models
 ```
 
+The model prompt accepts a listed number, `default` for the provider default, or
+a custom model name. Invalid numbers are rejected instead of being treated as
+model names.
+
 For one-off overrides, use a model name your local provider account supports:
 
 ```bash

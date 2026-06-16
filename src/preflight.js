@@ -92,14 +92,7 @@ export async function selectAgentModel({ agent, rl, stdout = process.stdout }) {
     const current = choice.value === (agent.model || "") ? " current" : "";
     stdout.write(`  ${index + 1}) ${choice.label}${current}\n`);
   });
-  const answer = (await rl.question("Select number or type custom model, Enter keeps current/default: ")).trim();
-  if (!answer) {
-    stdout.write(`  keeping ${agent.model || "provider default"}\n`);
-    return agent;
-  }
-
-  const selected = choices[Number(answer) - 1];
-  const model = selected ? selected.value : answer;
+  const model = await askModelSelection({ agent, choices, rl, stdout });
   runtimeSetAgentModel(agent, model || undefined);
   stdout.write(`  using ${agent.model || "provider default"}\n`);
   return agent;
@@ -146,6 +139,30 @@ export function modelChoices(agent = {}, provider = providerForAgent(agent)) {
     values.add(model === "provider default" ? "" : model);
   }
   return [...values].map((value) => ({ value, label: value || "provider default" }));
+}
+
+export function resolveModelSelection(answer, choices = [], currentModel = "") {
+  const value = String(answer || "").trim();
+  if (!value) return { ok: true, model: currentModel || "", action: "keep" };
+  if (/^(default|provider default)$/i.test(value)) return { ok: true, model: "", action: "default" };
+  if (/^\d+$/.test(value)) {
+    const choice = choices[Number(value) - 1];
+    if (!choice) return { ok: false, message: `Choose a number from 1 to ${choices.length}, or type a model name.` };
+    return { ok: true, model: choice.value, action: "choice" };
+  }
+  return { ok: true, model: value, action: "custom" };
+}
+
+async function askModelSelection({ agent, choices, rl, stdout }) {
+  while (true) {
+    const answer = await rl.question("Select number, 'default', or type custom model. Enter keeps current/default: ");
+    const selection = resolveModelSelection(answer, choices, agent.model || "");
+    if (selection.ok) {
+      if (selection.action === "keep") stdout.write(`  keeping ${selection.model || "provider default"}\n`);
+      return selection.model;
+    }
+    stdout.write(`  ${selection.message}\n`);
+  }
 }
 
 async function askYesNo(rl, question) {

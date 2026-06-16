@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { modelChoices, parseAuthStatus, providerForAgent } from "../src/preflight.js";
+import { modelChoices, parseAuthStatus, providerForAgent, resolveModelSelection } from "../src/preflight.js";
 
 test("providerForAgent detects Codex and Claude adapters", () => {
   assert.equal(providerForAgent({ id: "codex", command: "codex" }).label, "Codex");
@@ -27,4 +27,33 @@ test("modelChoices keeps provider default and configured model available", () =>
     { value: "custom-codex", label: "custom-codex" }
   ]);
   assert.equal(choices.some((choice) => choice.value === "gpt-5-codex"), true);
+});
+
+test("resolveModelSelection handles default, choices, custom models, and bad numbers", () => {
+  const choices = [
+    { value: "", label: "provider default" },
+    { value: "gpt-5-codex", label: "gpt-5-codex" }
+  ];
+
+  assert.deepEqual(resolveModelSelection("", choices, "current-model"), {
+    ok: true,
+    model: "current-model",
+    action: "keep"
+  });
+  assert.deepEqual(resolveModelSelection("default", choices, "current-model"), {
+    ok: true,
+    model: "",
+    action: "default"
+  });
+  assert.deepEqual(resolveModelSelection("2", choices, ""), {
+    ok: true,
+    model: "gpt-5-codex",
+    action: "choice"
+  });
+  assert.deepEqual(resolveModelSelection("gpt-custom", choices, ""), {
+    ok: true,
+    model: "gpt-custom",
+    action: "custom"
+  });
+  assert.equal(resolveModelSelection("99", choices, "").ok, false);
 });
