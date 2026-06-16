@@ -8,11 +8,12 @@ runs in the selected workspace.
 
 | Component | File | Responsibility |
 | --- | --- | --- |
-| CLI entrypoint | `bin/agent-deck.js` | Parse launch commands, create default config, run `doctor`, start the TUI. |
+| CLI entrypoint | `bin/agent-deck.js` | Parse launch commands, create default config, run `doctor`, generate blog drafts, start the TUI. |
 | Config loader | `src/config.js` | Discover config files, normalize agents, apply model overrides, validate routing. |
-| TUI app | `src/app.js` | Render panes, route messages, run tests/git commands, coordinate transcript/history. |
+| TUI app | `src/app.js` | Render the terminal cockpit, route messages, run tests/git commands, coordinate transcript/history. |
 | Agent process | `src/agent.js` | Spawn turn-mode child processes or interactive PTYs. Clean provider output. |
 | Transcript | `src/transcript.js` | Write Markdown session logs and build shared context snippets. |
+| Blog draft helper | `src/blog.js` | Convert a transcript into a Korean post draft with counts, recent turns, and a cleanup checklist. |
 | Git/test helpers | `src/git.js` | Run shell commands in the workspace and summarize output. |
 
 ## Message Flow
@@ -77,12 +78,20 @@ Current message for Claude:
 This lets a second agent join a conversation without manual copy/paste. The
 tradeoff is token cost, controlled by `maxHistoryChars`.
 
-## Session Export
+## Transcript Controls, Export, and Blog Drafts
 
-The transcript is the raw log. `/export [name]` writes a compact Markdown export
-next to that log. The export records counts for user prompts, agent outputs, and
-test events, then includes recent context. It is intended for handoff notes,
-decision logs, and blog draft material.
+The transcript is the raw log. Recording can be paused with `/record off` and
+resumed with `/record on`. `/redact-last` removes the most recent transcript
+record and rewrites the file, which is useful before sharing session notes.
+
+`/export [name]` writes a compact Markdown export next to the raw log. The
+export records counts for user prompts, agent outputs, and test events, then
+includes recent context. It is intended for handoff notes and decision logs.
+
+`agent-deck blog <transcript.md>` runs outside the TUI and writes a Korean blog
+draft from the transcript. It keeps the raw record separate from the publishable
+post so the developer can edit conclusions and remove private details before
+publishing.
 
 ## Safety Boundaries
 

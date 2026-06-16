@@ -84,12 +84,22 @@ During a session:
 /test
 /models
 /status
+/timeout codex 120000
+/record off
+/record on
 /export decisions
 ```
 
 After a session:
 
 - Read the transcript under `.agent-deck/sessions`.
+- Generate a first blog draft when the session is worth publishing:
+
+```bash
+agent-deck blog .agent-deck/sessions/session.md --out draft.md --title "Agent Deck 작업 기록"
+```
+
+- Edit the generated draft for claims, code links, and screenshots.
 - Commit code changes separately from transcript files.
 - Keep `.agent-deck/` ignored unless you intentionally want to publish a session
   log.

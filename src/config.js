@@ -147,6 +147,13 @@ export function parseComposerCommand(input, agentIds = []) {
       return { type: "review", message: tail };
     case "export":
       return { type: "export", name: tail || undefined };
+    case "timeout":
+      return { type: "timeout", target: rest[0], value: rest[1] };
+    case "record":
+      return { type: "record", value: rest[0] };
+    case "redact-last":
+    case "redact":
+      return { type: "redact-last" };
     case "restart":
       return { type: "restart", target: rest[0] };
     case "clear":

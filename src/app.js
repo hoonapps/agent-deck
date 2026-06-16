@@ -7,6 +7,7 @@ import { Transcript } from "./transcript.js";
 const THEME = {
   bg: "black",
   headerBg: "black",
+  panelBg: "black",
   accent: "cyan",
   muted: "gray",
   text: "white",
@@ -31,6 +32,9 @@ const HELP_TEXT = `Commands:
 /status                 show agent status
 /review <message>       send a review prompt to reviewer agents
 /export [name]          export a session summary
+/timeout <agent> <ms>   set an agent turn timeout
+/record <on|off>        pause or resume transcript recording
+/redact-last            remove the last transcript record
 /restart <agent>        restart an agent
 /clear <agent|all>      clear output
 /models                 list current agent models
@@ -79,11 +83,12 @@ class AgentDeckApp {
   }
 
   createLayout() {
+    const headerHeight = 2;
     this.header = blessed.box({
       top: 0,
       left: 0,
       width: "100%",
-      height: 1,
+      height: headerHeight,
       tags: true,
       style: { fg: THEME.text, bg: THEME.headerBg }
     });
@@ -91,21 +96,23 @@ class AgentDeckApp {
 
     const screenHeight = this.screen.height || 40;
     const bottomPanelHeight = Math.min(6, Math.max(4, Math.floor(screenHeight * 0.12)));
-    const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - 5);
-    this.grid = blessed.layout({
-      top: 1,
+    const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - headerHeight - 4);
+    this.grid = blessed.box({
+      top: headerHeight,
       left: 0,
       width: "100%",
-      height: gridHeight,
-      layout: "grid"
+      height: gridHeight
     });
     this.screen.append(this.grid);
 
     for (const agent of this.config.agents) {
+      const position = panePosition(this.config.agents.indexOf(agent), this.config.agents.length);
       const box = blessed.box({
-        label: ` ${agent.label} `,
-        width: `${100 / this.config.agents.length}%`,
-        height: "100%",
+        label: formatPaneTitle(agent, { state: "idle" }),
+        top: position.top,
+        left: position.left,
+        width: position.width,
+        height: position.height,
         border: "line",
         scrollable: true,
         alwaysScroll: true,
@@ -116,7 +123,7 @@ class AgentDeckApp {
         scrollbar: { ch: " ", track: { bg: "black" }, style: { bg: "cyan" } },
         style: {
           fg: THEME.text,
-          bg: THEME.bg,
+          bg: THEME.panelBg,
           border: { fg: THEME.muted },
           focus: { border: { fg: THEME.accent } },
           scrollbar: { bg: THEME.accent }
@@ -126,19 +133,24 @@ class AgentDeckApp {
       this.boxes.set(agent.id, box);
     }
 
-    const bottomTop = 1 + gridHeight;
+    const bottomTop = headerHeight + gridHeight;
     this.historyBox = blessed.box({
       top: bottomTop,
       left: 0,
       width: "50%",
       bottom: 4,
-      label: " History ",
+      label: " Context History ",
       border: "line",
       scrollable: true,
       alwaysScroll: true,
       tags: true,
       mouse: true,
-      style: { border: { fg: "gray" } }
+      style: {
+        fg: THEME.text,
+        bg: THEME.panelBg,
+        border: { fg: THEME.muted },
+        scrollbar: { bg: THEME.accent }
+      }
     });
     this.screen.append(this.historyBox);
 
@@ -147,13 +159,18 @@ class AgentDeckApp {
       left: "50%",
       width: "50%",
       bottom: 4,
-      label: " Activity ",
+      label: " Run Log ",
       border: "line",
       scrollable: true,
       alwaysScroll: true,
       tags: false,
       mouse: true,
-      style: { border: { fg: "gray" } }
+      style: {
+        fg: THEME.text,
+        bg: THEME.panelBg,
+        border: { fg: THEME.muted },
+        scrollbar: { bg: THEME.accent }
+      }
     });
     this.screen.append(this.activityBox);
 
@@ -269,6 +286,12 @@ class AgentDeckApp {
       this.review(command.message);
     } else if (command.type === "export") {
       this.exportSession(command.name);
+    } else if (command.type === "timeout") {
+      this.setTimeout(command.target, command.value);
+    } else if (command.type === "record") {
+      this.setRecording(command.value);
+    } else if (command.type === "redact-last") {
+      this.redactLast();
     } else if (command.type === "restart") {
       this.restart(command.target);
     } else if (command.type === "clear") {
@@ -405,6 +428,36 @@ class AgentDeckApp {
     this.log(`Exported session summary: ${path}`);
   }
 
+  setTimeout(target, value) {
+    const agent = this.findAgent(target);
+    const timeoutMs = Number(value);
+    if (!agent || !Number.isInteger(timeoutMs) || timeoutMs < 0) {
+      this.log("Usage: /timeout <agent> <ms>");
+      return;
+    }
+    agent.turnTimeoutMs = timeoutMs;
+    this.agentProcess(agent.id).agent.turnTimeoutMs = timeoutMs;
+    this.log(`Set ${agent.name} timeout to ${timeoutMs}ms.`);
+  }
+
+  setRecording(value) {
+    const normalized = String(value || "").toLowerCase();
+    if (!["on", "off", "pause", "resume"].includes(normalized)) {
+      this.log("Usage: /record <on|off>");
+      return;
+    }
+    const enabled = normalized === "on" || normalized === "resume";
+    this.transcript.setRecording(enabled);
+    this.refreshHistory();
+    this.log(`Transcript recording ${enabled ? "resumed" : "paused"}.`);
+  }
+
+  redactLast() {
+    const removed = this.transcript.redactLast();
+    this.refreshHistory();
+    this.log(removed ? `Redacted last transcript record: ${removed.source}` : "No transcript record to redact.");
+  }
+
   clear(target) {
     if (target === "all") {
       for (const box of this.boxes.values()) box.setContent("");
@@ -475,7 +528,7 @@ class AgentDeckApp {
   }
 
   log(message) {
-    const line = `[${new Date().toLocaleTimeString()}] ${message}`;
+    const line = formatLogLine(message);
     this.activityLines.push(line);
     this.activityLines = this.activityLines.slice(-300);
     this.activityBox?.setContent(this.activityLines.join("\n"));
@@ -486,7 +539,9 @@ class AgentDeckApp {
   updateActiveAgent(agentId) {
     this.activeAgentId = agentId;
     this.updateHeader();
+    this.updateComposerLabel();
     for (const [agentId, box] of this.boxes.entries()) {
+      this.updateAgentLabel(agentId);
       const selected = this.activeAgentId === agentId;
       box.style.border.fg = selected ? THEME.accent : this.statusColor(this.agentStatus(agentId).state);
     }
@@ -533,34 +588,43 @@ class AgentDeckApp {
     const box = this.boxes.get(agentId);
     if (!agent || !box) return;
     const status = this.agentStatus(agentId);
-    box.setLabel(` ${agent.label} [${status.state}] `);
+    box.setLabel(formatPaneTitle(agent, status, this.activeAgentId === agentId));
     if (this.activeAgentId !== agentId) box.style.border.fg = this.statusColor(status.state);
   }
 
   updateHeader() {
     const agent = this.activeAgent();
-    const routes = this.config.agents.map((item) => `/${item.aliases[0] || item.id}:${item.label}`).join(" ");
+    const routes = this.config.agents.map((item) => `/${item.aliases[0] || item.id}`).join(" ");
     const statuses = this.config.agents
       .map((item) => {
         const state = this.agentStatus(item.id).state;
-        return `{${this.statusColor(state)}-fg}${item.id}:${state}{/${this.statusColor(state)}-fg}`;
+        return `{${this.statusColor(state)}-fg}${item.id}:${formatStatusBadge(state)}{/${this.statusColor(state)}-fg}`;
       })
       .join(" ");
-    this.header.setContent(` {bold}${this.config.title}{/bold}  chat:{cyan-fg}${agent?.id || "none"}{/cyan-fg}  ${statuses}  ${routes} `);
+    const active = agent ? `${agent.id}${agent.model ? `:${agent.model}` : ""}` : "none";
+    const recording = this.transcript.recording ? "{green-fg}record:on{/green-fg}" : "{yellow-fg}record:paused{/yellow-fg}";
+    this.header.setContent(
+      ` {bold}${this.config.title}{/bold}  {gray-fg}|{/gray-fg} active:{cyan-fg}${active}{/cyan-fg}  {gray-fg}|{/gray-fg} ${recording}\n` +
+        ` ${statuses}  {gray-fg}| routes ${routes} | F10 test | Ctrl+C quit{/gray-fg}`
+    );
   }
 
   updateStatusBar() {
     const parts = [
-      "{cyan-fg}/co{/cyan-fg} codex",
-      "{magenta-fg}/cl{/magenta-fg} claude",
-      "{yellow-fg}/review{/yellow-fg}",
-      "{green-fg}/test{/green-fg}",
-      "{blue-fg}/export{/blue-fg}",
+      "{cyan-fg}/co{/cyan-fg} {magenta-fg}/cl{/magenta-fg} /to",
+      "{yellow-fg}/review{/yellow-fg} {green-fg}/test{/green-fg} /status",
+      "{blue-fg}/export{/blue-fg} /timeout",
+      "{gray-fg}/record{/gray-fg} /redact",
       "{white-fg}F8 history{/white-fg}",
-      "{white-fg}F10 test{/white-fg}",
       "{red-fg}Ctrl+C quit{/red-fg}"
     ];
-    this.statusBar?.setContent(` ${parts.join("  ")} `);
+    this.statusBar?.setContent(` ${parts.join("  {gray-fg}|{/gray-fg}  ")} `);
+  }
+
+  updateComposerLabel() {
+    const agent = this.activeAgent();
+    const target = agent ? ` -> ${agent.id}` : " (/co /cl /to)";
+    this.input?.setLabel(` Message${target} `);
   }
 
   statusColor(state) {
@@ -635,11 +699,38 @@ class AgentDeckApp {
 
 function formatPaneMessage(label, message) {
   const text = String(message).trim();
-  if (!text) return `${label}:`;
-  return `${label}:\n${text}`;
+  const heading = label === "You" ? "YOU" : String(label).toUpperCase();
+  if (!text) return `[${heading}]`;
+  return `[${heading}]\n${text}`;
 }
 
 function formatDuration(ms = 0) {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
+}
+
+export function formatStatusBadge(state = "unknown") {
+  return String(state || "unknown").toUpperCase().slice(0, 7);
+}
+
+export function formatPaneTitle(agent, status = {}, active = false) {
+  const marker = active ? ">" : " ";
+  return ` ${marker} ${agent.label} | ${formatStatusBadge(status.state)} `;
+}
+
+export function formatLogLine(message, now = new Date()) {
+  return `${now.toLocaleTimeString()} | ${message}`;
+}
+
+export function panePosition(index, count) {
+  const cols = count <= 2 ? count : 2;
+  const rows = Math.ceil(count / cols);
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+  return {
+    top: `${(row * 100) / rows}%`,
+    left: `${(col * 100) / cols}%`,
+    width: `${100 / cols}%`,
+    height: `${100 / rows}%`
+  };
 }

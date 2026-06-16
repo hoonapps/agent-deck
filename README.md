@@ -18,10 +18,12 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Run the configured test command without leaving the TUI
 - Set each agent model through config, environment variables, short launch flags, or `/set-model`
 - Show live agent status, last duration, and exit information with `/status`
-- Use status-colored headers, pane borders, and a command hint bar for a cleaner cockpit
-- Stop runaway turn-mode agents with configurable `turnTimeoutMs`
+- Use a polished terminal cockpit with a two-line header, state badges, focused pane titles, and a command hint bar
+- Stop runaway turn-mode agents with configurable `turnTimeoutMs` or runtime `/timeout`
+- Pause transcript recording and redact the last transcript event before sharing notes
 - Send a reviewer prompt to selected agents with `/review`
 - Export a Markdown session summary with `/export`
+- Generate a Korean blog draft from a transcript with `agent-deck blog`
 - Configure agents per repository with `agent-deck.config.json`
 
 ## Install
@@ -77,6 +79,12 @@ Validate config without opening the TUI:
 agent-deck validate
 ```
 
+Create a blog draft from an existing transcript:
+
+```bash
+agent-deck blog .agent-deck/sessions/session.md --out draft.md --title "Agent Deck 작업 기록"
+```
+
 For a CLI-only smoke test without Codex or Claude installed, run the demo config:
 
 ```bash
@@ -110,6 +118,9 @@ bottom. Agent pane borders change color by state.
 | `/status` | Show agent state, turn count, last exit, and last duration |
 | `/review <message>` | Send a review prompt to reviewer agents |
 | `/export [name]` | Write a Markdown session export next to the transcript |
+| `/timeout <agent> <ms>` | Change an agent's turn timeout while running |
+| `/record <on\|off>` | Pause or resume transcript recording |
+| `/redact-last` | Remove the last transcript record and rewrite the transcript |
 | `/restart <agent>` | Restart one agent process |
 | `/clear <agent\|all>` | Clear output panes |
 | `/models` | Show current agent models |
@@ -222,6 +233,7 @@ To use raw interactive CLI behavior, set `mode: "interactive"` and keep the nati
 npm install
 npm test
 npm run lint
+node ./bin/agent-deck.js validate --config examples/demo.config.json
 ```
 
 ## Documentation

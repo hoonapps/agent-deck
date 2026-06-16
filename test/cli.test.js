@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -40,4 +40,33 @@ test("agent-deck validate fails on invalid config", () => {
       }),
     /Configuration must define at least one agent/
   );
+});
+
+test("agent-deck blog creates a blog draft from a transcript", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-cli-"));
+  const transcriptPath = join(dir, "session.md");
+  const outPath = join(dir, "post.md");
+  writeFileSync(
+    transcriptPath,
+    `# Agent Deck Session
+
+- Started: 2026-06-16T00:00:00.000Z
+- Workspace: ${dir}
+
+## 2026-06-16T00:01:00.000Z input -> codex
+
+\`\`\`text
+블로그 초안 만들어줘
+\`\`\`
+`
+  );
+
+  const output = execFileSync(process.execPath, [bin, "blog", transcriptPath, "--out", outPath, "--title", "Agent Deck 기록"], {
+    cwd: dir,
+    encoding: "utf8"
+  });
+
+  assert.match(output, /Created/);
+  assert.equal(existsSync(outPath), true);
+  assert.match(readFileSync(outPath, "utf8"), /Agent Deck 기록/);
 });

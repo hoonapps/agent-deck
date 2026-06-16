@@ -4,6 +4,7 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 import { createApp } from "../src/app.js";
+import { writeBlogDraft } from "../src/blog.js";
 import { findExecutable, loadConfig, parseModelOverrides } from "../src/config.js";
 
 const args = process.argv.slice(2);
@@ -18,6 +19,7 @@ Usage:
              [--model codex=gpt-5.3-codex] [--codex-model gpt-5.3-codex] [--claude-model sonnet]
   agent-deck doctor
   agent-deck validate
+  agent-deck blog <transcript.md> [--out draft.md] [--title "Post title"]
   agent-deck init
 
 Shortcuts:
@@ -36,6 +38,9 @@ Composer commands:
   /status                 Show agent state and last turn result
   /review <msg>           Send a review prompt to reviewer agents
   /export [name]          Export a Markdown session summary
+  /timeout <agent> <ms>   Set a turn timeout while running
+  /record <on|off>        Pause or resume transcript recording
+  /redact-last            Remove the last transcript record
   /restart <agent>        Restart one agent process
   /clear <agent|all>      Clear output
   /models                 List current agent models
@@ -94,9 +99,32 @@ function initConfig() {
         testCommand: "npm test",
         shareHistory: true,
         maxHistoryChars: 6000,
+        turnTimeoutMs: 300000,
+        reviewAgents: ["codex", "claude"],
+        rolePresets: {
+          reviewer: "Find correctness, regression, test, and security issues first."
+        },
         agents: [
-          { id: "codex", aliases: ["co"], name: "Codex", command: "codex", mode: "turn", model: "gpt-5.3-codex", args: [] },
-          { id: "claude", aliases: ["cl"], name: "Claude", command: "claude", mode: "turn", model: "sonnet", args: [] }
+          {
+            id: "codex",
+            aliases: ["co"],
+            name: "Codex",
+            command: "codex",
+            mode: "turn",
+            role: "implementer",
+            model: "gpt-5.3-codex",
+            args: []
+          },
+          {
+            id: "claude",
+            aliases: ["cl"],
+            name: "Claude",
+            command: "claude",
+            mode: "turn",
+            role: "reviewer",
+            model: "sonnet",
+            args: []
+          }
         ]
       },
       null,
@@ -112,6 +140,8 @@ if (args.includes("-h") || args.includes("--help")) {
   await doctor();
 } else if (args[0] === "validate") {
   validateConfig();
+} else if (args[0] === "blog") {
+  blogDraft();
 } else if (args[0] === "init") {
   initConfig();
 } else {
@@ -142,6 +172,19 @@ function validateConfig() {
   console.log(`✓ config ok: ${config.configPath || "(defaults)"}`);
   console.log(`Workspace: ${config.workspace}`);
   console.log(`Agents: ${config.agents.map((agent) => agent.id).join(", ")}`);
+}
+
+function blogDraft() {
+  const transcriptPath = args[1];
+  if (!transcriptPath) {
+    console.error("Usage: agent-deck blog <transcript.md> [--out draft.md] [--title title]");
+    process.exitCode = 1;
+    return;
+  }
+  const outPath = valueAfter("--out");
+  const title = valueAfter("--title");
+  const target = writeBlogDraft({ transcriptPath, outPath, title });
+  console.log(`Created ${target}`);
 }
 
 function singleModelOverride(agent, flag) {

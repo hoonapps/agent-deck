@@ -6,22 +6,37 @@ export class Transcript {
     mkdirSync(dir, { recursive: true });
     this.path = join(dir, `${sessionName}.md`);
     this.startedAt = new Date();
-    writeFileSync(
-      this.path,
-      `# Agent Deck Session\n\n- Started: ${this.startedAt.toISOString()}\n- Workspace: ${config.workspace}\n\n`
-    );
+    this.workspace = config.workspace;
+    this.records = [];
     this.entries = [];
     this.hasUserInput = false;
+    this.recording = true;
+    this.rewriteFile();
   }
 
-  event(source, message, { includeInContext = true } = {}) {
+  event(source, message, { includeInContext = true, force = false } = {}) {
+    if (!this.recording && !force) return false;
     const time = new Date().toISOString();
     const text = String(message).replace(/\n+$/g, "");
-    appendFileSync(this.path, `\n## ${time} ${source}\n\n${fence(text)}\n`);
-    if (includeInContext) {
-      this.entries.push({ time, source, message: text });
-      this.entries = this.entries.slice(-300);
-    }
+    const record = { time, source, message: text, includeInContext };
+    this.records.push(record);
+    appendFileSync(this.path, formatRecord(record));
+    this.rebuildEntries();
+    return true;
+  }
+
+  setRecording(enabled) {
+    this.recording = Boolean(enabled);
+    this.event("recording", this.recording ? "resumed" : "paused", { includeInContext: false, force: true });
+    return this.recording;
+  }
+
+  redactLast() {
+    if (this.records.length === 0) return null;
+    const removed = this.records.pop();
+    this.rebuildEntries();
+    this.rewriteFile();
+    return removed;
   }
 
   input(target, message) {
@@ -82,6 +97,34 @@ export class Transcript {
   dir() {
     return dirname(this.path);
   }
+
+  rewriteFile() {
+    writeFileSync(
+      this.path,
+      [
+        "# Agent Deck Session",
+        "",
+        `- Started: ${this.startedAt.toISOString()}`,
+        `- Workspace: ${this.workspace}`,
+        "",
+        ...this.records.map((record) => formatRecord(record).trimEnd()),
+        ""
+      ].join("\n"),
+      "utf8"
+    );
+  }
+
+  rebuildEntries() {
+    this.entries = this.records
+      .filter((record) => record.includeInContext)
+      .map(({ time, source, message }) => ({ time, source, message }))
+      .slice(-300);
+    this.hasUserInput = this.entries.some((entry) => entry.source.startsWith("input -> "));
+  }
+}
+
+function formatRecord(record) {
+  return `\n## ${record.time} ${record.source}\n\n${fence(record.message)}\n`;
 }
 
 function fence(value) {

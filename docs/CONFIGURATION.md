@@ -110,7 +110,7 @@ claude --print --output-format text
 Use turn mode when you want transcript-friendly output, repeatable turns, and
 less provider UI noise.
 
-## Status, Timeout, and Export
+## Status, Timeout, Transcript, and Export
 
 Use `/status` inside the TUI to inspect each agent:
 
@@ -132,6 +132,26 @@ Use `turnTimeoutMs` to stop long-running turn-mode agents:
 }
 ```
 
+Adjust the timeout during a session without editing config:
+
+```text
+/timeout codex 120000
+```
+
+Pause recording while discussing sensitive context, then resume when the session
+is publishable again:
+
+```text
+/record off
+/record on
+```
+
+Remove the most recent transcript record:
+
+```text
+/redact-last
+```
+
 Use `/export` to write a Markdown session summary next to the transcript:
 
 ```text
@@ -142,6 +162,12 @@ This creates a file such as:
 
 ```text
 .agent-deck/sessions/2026-06-16T...-decisions.md
+```
+
+Use the CLI blog helper to turn a transcript into a Korean draft:
+
+```bash
+agent-deck blog .agent-deck/sessions/session.md --out draft.md --title "Agent Deck 작업 기록"
 ```
 
 ## Roles and Review

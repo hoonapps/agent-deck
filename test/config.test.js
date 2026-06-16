@@ -162,6 +162,16 @@ test("parseComposerCommand supports status, review, and export commands", () => 
     type: "export",
     name: "decisions"
   });
+  assert.deepEqual(parseComposerCommand("/timeout codex 120000"), {
+    type: "timeout",
+    target: "codex",
+    value: "120000"
+  });
+  assert.deepEqual(parseComposerCommand("/record off"), {
+    type: "record",
+    value: "off"
+  });
+  assert.deepEqual(parseComposerCommand("/redact-last"), { type: "redact-last" });
 });
 
 test("loadConfig applies global and per-agent turn timeout values", () => {

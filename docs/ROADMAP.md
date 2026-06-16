@@ -7,13 +7,13 @@ This roadmap keeps the direction practical.
 
 - Stronger CLI argument parsing with clear errors for unknown flags.
 - CI examples that run `agent-deck validate` before starting a session.
-- Configurable pane layouts for more than two agents.
-- Better transcript controls: pause recording and redact last entry.
+- Better keyboard focus movement for three or more agent panes.
+- Confirmation prompts for destructive transcript actions.
 - Richer agent health display with timestamps and last stderr snippet.
 
 ## Agent Runtime
 
-- Turn timeout controls in the TUI, not only config.
+- Per-agent timeout presets and quick toggles.
 - Optional command allowlists for test/git commands.
 - Structured turn events in the transcript.
 - Safer cancellation for long-running child processes.
@@ -25,12 +25,13 @@ This roadmap keeps the direction practical.
 - Route presets beyond review: implement, test, research, and architecture lanes.
 - Session replay mode for reading a transcript in the TUI.
 - Lightweight handoff summaries between agents.
+- Blog draft refinement for publish-ready Chirpy posts with screenshots.
 
 ## Packaging
 
 - Publish-ready npm package metadata.
 - Installation docs for macOS, Linux, and Windows terminals.
-- Screenshots or asciinema demo.
+- Screenshots or asciinema demo of the polished terminal cockpit.
 - Example configs for Codex-only, Claude-only, and mixed local model setups.
 
 ## Product Principle
