@@ -147,6 +147,8 @@ export function parseComposerCommand(input, agentIds = []) {
       return { type: "review", message: tail };
     case "export":
       return { type: "export", name: tail || undefined };
+    case "findings":
+      return { type: "findings", name: tail || undefined };
     case "timeout":
       return { type: "timeout", target: rest[0], value: rest[1] };
     case "record":

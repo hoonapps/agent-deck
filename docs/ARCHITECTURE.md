@@ -13,6 +13,7 @@ runs in the selected workspace.
 | TUI app | `src/app.js` | Render the terminal cockpit, route messages, run tests/git commands, coordinate transcript/history. |
 | Agent process | `src/agent.js` | Spawn turn-mode child processes or interactive PTYs. Clean provider output. |
 | Transcript | `src/transcript.js` | Write Markdown session logs and build shared context snippets. |
+| Transcript tools | `src/transcript-tools.js` | Parse transcripts, list sessions, replay timelines, and extract review findings. |
 | Blog draft helper | `src/blog.js` | Convert a transcript into a Korean post draft with counts, recent turns, and a cleanup checklist. |
 | Git/test helpers | `src/git.js` | Run shell commands in the workspace and summarize output. |
 
@@ -92,6 +93,11 @@ includes recent context. It is intended for handoff notes and decision logs.
 draft from the transcript. It keeps the raw record separate from the publishable
 post so the developer can edit conclusions and remove private details before
 publishing.
+
+The same transcript parser powers `agent-deck sessions`, `agent-deck replay`,
+and `agent-deck findings`. `/findings` uses the in-memory session entries to
+write a Markdown table from review outputs, while the CLI form works on saved
+transcript files after the session.
 
 ## Safety Boundaries
 

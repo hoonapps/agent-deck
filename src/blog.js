@@ -1,5 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
+import { parseTranscriptEntries } from "./transcript-tools.js";
+
+export { parseTranscriptEntries };
 
 export function buildBlogDraftFromTranscript(markdown, { title, sourcePath } = {}) {
   const entries = parseTranscriptEntries(markdown);
@@ -35,19 +38,6 @@ export function buildBlogDraftFromTranscript(markdown, { title, sourcePath } = {
     "- 다음 작업",
     ""
   ].join("\n");
-}
-
-export function parseTranscriptEntries(markdown) {
-  const entries = [];
-  const pattern = /^## ([^\n]+?) ([^\n]+)\n\n```text\n([\s\S]*?)\n```/gm;
-  for (const match of markdown.matchAll(pattern)) {
-    entries.push({
-      time: match[1],
-      source: match[2],
-      message: match[3].trim()
-    });
-  }
-  return entries;
 }
 
 export function writeBlogDraft({ transcriptPath, outPath, title } = {}) {

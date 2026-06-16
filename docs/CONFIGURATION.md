@@ -164,6 +164,20 @@ This creates a file such as:
 .agent-deck/sessions/2026-06-16T...-decisions.md
 ```
 
+Use `/findings` after review turns to write a Markdown findings table:
+
+```text
+/findings review-table
+```
+
+Use CLI transcript tools outside the TUI:
+
+```bash
+agent-deck sessions
+agent-deck replay .agent-deck/sessions/session.md --limit 40
+agent-deck findings .agent-deck/sessions/session.md --out findings.md
+```
+
 Use the CLI blog helper to turn a transcript into a Korean draft:
 
 ```bash

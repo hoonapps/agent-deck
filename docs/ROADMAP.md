@@ -10,6 +10,7 @@ This roadmap keeps the direction practical.
 - Better keyboard focus movement for three or more agent panes.
 - Confirmation prompts for destructive transcript actions.
 - Richer agent health display with timestamps and last stderr snippet.
+- Findings extraction that understands structured JSON review output.
 
 ## Agent Runtime
 
@@ -23,7 +24,7 @@ This roadmap keeps the direction practical.
 
 - Named task lanes such as `review`, `implement`, `research`.
 - Route presets beyond review: implement, test, research, and architecture lanes.
-- Session replay mode for reading a transcript in the TUI.
+- Session replay mode for reading a transcript inside the TUI, beyond CLI replay.
 - Lightweight handoff summaries between agents.
 - Blog draft refinement for publish-ready Chirpy posts with screenshots.
 

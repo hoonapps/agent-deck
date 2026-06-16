@@ -23,6 +23,8 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Pause transcript recording and redact the last transcript event before sharing notes
 - Send a reviewer prompt to selected agents with `/review`
 - Export a Markdown session summary with `/export`
+- Export review output as a findings table with `/findings` or `agent-deck findings`
+- List and replay saved transcripts from the CLI
 - Generate a Korean blog draft from a transcript with `agent-deck blog`
 - Configure agents per repository with `agent-deck.config.json`
 
@@ -79,6 +81,24 @@ Validate config without opening the TUI:
 agent-deck validate
 ```
 
+List saved transcript sessions:
+
+```bash
+agent-deck sessions
+```
+
+Replay a transcript as a compact timeline:
+
+```bash
+agent-deck replay .agent-deck/sessions/session.md --limit 40
+```
+
+Extract review findings into a Markdown table:
+
+```bash
+agent-deck findings .agent-deck/sessions/session.md --out findings.md
+```
+
 Create a blog draft from an existing transcript:
 
 ```bash
@@ -118,6 +138,7 @@ bottom. Agent pane borders change color by state.
 | `/status` | Show agent state, turn count, last exit, and last duration |
 | `/review <message>` | Send a review prompt to reviewer agents |
 | `/export [name]` | Write a Markdown session export next to the transcript |
+| `/findings [name]` | Write review findings as a Markdown table |
 | `/timeout <agent> <ms>` | Change an agent's turn timeout while running |
 | `/record <on\|off>` | Pause or resume transcript recording |
 | `/redact-last` | Remove the last transcript record and rewrite the transcript |

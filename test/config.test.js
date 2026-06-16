@@ -162,6 +162,10 @@ test("parseComposerCommand supports status, review, and export commands", () => 
     type: "export",
     name: "decisions"
   });
+  assert.deepEqual(parseComposerCommand("/findings review-table"), {
+    type: "findings",
+    name: "review-table"
+  });
   assert.deepEqual(parseComposerCommand("/timeout codex 120000"), {
     type: "timeout",
     target: "codex",

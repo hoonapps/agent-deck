@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { formatFindingsMarkdown, extractReviewFindings } from "./transcript-tools.js";
 
 export class Transcript {
   constructor({ dir, sessionName, config }) {
@@ -90,6 +91,14 @@ export class Transcript {
     return path;
   }
 
+  exportFindings({ name = "findings" } = {}) {
+    const safeName = safeFileName(name);
+    const path = join(this.dir(), `${this.sessionBaseName()}-${safeName}.md`);
+    const findings = extractReviewFindings(this.entries);
+    writeFileSync(path, formatFindingsMarkdown(findings, { sourcePath: this.path }), "utf8");
+    return { path, count: findings.length };
+  }
+
   sessionBaseName() {
     return basename(this.path, ".md");
   }
@@ -121,6 +130,15 @@ export class Transcript {
       .slice(-300);
     this.hasUserInput = this.entries.some((entry) => entry.source.startsWith("input -> "));
   }
+}
+
+function safeFileName(value) {
+  return (
+    String(value)
+      .trim()
+      .replace(/[^a-zA-Z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "findings"
+  );
 }
 
 function formatRecord(record) {

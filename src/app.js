@@ -32,6 +32,7 @@ const HELP_TEXT = `Commands:
 /status                 show agent status
 /review <message>       send a review prompt to reviewer agents
 /export [name]          export a session summary
+/findings [name]        export review findings as a table
 /timeout <agent> <ms>   set an agent turn timeout
 /record <on|off>        pause or resume transcript recording
 /redact-last            remove the last transcript record
@@ -286,6 +287,8 @@ class AgentDeckApp {
       this.review(command.message);
     } else if (command.type === "export") {
       this.exportSession(command.name);
+    } else if (command.type === "findings") {
+      this.exportFindings(command.name);
     } else if (command.type === "timeout") {
       this.setTimeout(command.target, command.value);
     } else if (command.type === "record") {
@@ -426,6 +429,12 @@ class AgentDeckApp {
     const path = this.transcript.exportSummary({ name: name || "summary" });
     this.transcript.event("export", path, { includeInContext: false });
     this.log(`Exported session summary: ${path}`);
+  }
+
+  exportFindings(name) {
+    const { path, count } = this.transcript.exportFindings({ name: name || "findings" });
+    this.transcript.event("findings", path, { includeInContext: false });
+    this.log(`Exported ${count} review findings: ${path}`);
   }
 
   setTimeout(target, value) {
@@ -613,7 +622,7 @@ class AgentDeckApp {
     const parts = [
       "{cyan-fg}/co{/cyan-fg} {magenta-fg}/cl{/magenta-fg} /to",
       "{yellow-fg}/review{/yellow-fg} {green-fg}/test{/green-fg} /status",
-      "{blue-fg}/export{/blue-fg} /timeout",
+      "{blue-fg}/export{/blue-fg} /findings /timeout",
       "{gray-fg}/record{/gray-fg} /redact",
       "{white-fg}F8 history{/white-fg}",
       "{red-fg}Ctrl+C quit{/red-fg}"

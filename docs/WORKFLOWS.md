@@ -88,11 +88,25 @@ During a session:
 /record off
 /record on
 /export decisions
+/findings review-table
 ```
 
 After a session:
 
 - Read the transcript under `.agent-deck/sessions`.
+- List and replay previous sessions when deciding what to publish:
+
+```bash
+agent-deck sessions
+agent-deck replay .agent-deck/sessions/session.md --limit 40
+```
+
+- Extract review output into a table when a session contains critique:
+
+```bash
+agent-deck findings .agent-deck/sessions/session.md --out findings.md
+```
+
 - Generate a first blog draft when the session is worth publishing:
 
 ```bash

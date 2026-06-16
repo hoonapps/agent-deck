@@ -52,3 +52,22 @@ test("Transcript can pause recording and redact the last record", () => {
   assert.doesNotMatch(content, /do not persist/);
   assert.doesNotMatch(content, /remove this/);
 });
+
+test("Transcript exports review findings", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-transcript-"));
+  const transcript = new Transcript({
+    dir,
+    sessionName: "findings-session",
+    config: { workspace: "/tmp/work" }
+  });
+
+  transcript.input("review -> codex", "find blocking issues");
+  transcript.output("codex", "- Blocking: src/app.js:10 can throw without validation");
+
+  const result = transcript.exportFindings({ name: "review" });
+  const content = readFileSync(result.path, "utf8");
+
+  assert.equal(result.count, 1);
+  assert.match(result.path, /findings-session-review\.md$/);
+  assert.match(content, /src\/app.js:10/);
+});

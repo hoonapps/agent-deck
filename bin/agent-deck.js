@@ -6,6 +6,7 @@ import process from "node:process";
 import { createApp } from "../src/app.js";
 import { writeBlogDraft } from "../src/blog.js";
 import { findExecutable, loadConfig, parseModelOverrides } from "../src/config.js";
+import { buildReplayFromFile, formatSessionList, listTranscriptFiles, writeFindingsReport } from "../src/transcript-tools.js";
 
 const args = process.argv.slice(2);
 
@@ -19,6 +20,9 @@ Usage:
              [--model codex=gpt-5.3-codex] [--codex-model gpt-5.3-codex] [--claude-model sonnet]
   agent-deck doctor
   agent-deck validate
+  agent-deck sessions [--dir .agent-deck/sessions]
+  agent-deck replay <transcript.md> [--limit 40]
+  agent-deck findings <transcript.md> [--out findings.md]
   agent-deck blog <transcript.md> [--out draft.md] [--title "Post title"]
   agent-deck init
 
@@ -38,6 +42,7 @@ Composer commands:
   /status                 Show agent state and last turn result
   /review <msg>           Send a review prompt to reviewer agents
   /export [name]          Export a Markdown session summary
+  /findings [name]        Export review findings as a Markdown table
   /timeout <agent> <ms>   Set a turn timeout while running
   /record <on|off>        Pause or resume transcript recording
   /redact-last            Remove the last transcript record
@@ -140,6 +145,12 @@ if (args.includes("-h") || args.includes("--help")) {
   await doctor();
 } else if (args[0] === "validate") {
   validateConfig();
+} else if (args[0] === "sessions") {
+  listSessions();
+} else if (args[0] === "replay") {
+  replaySession();
+} else if (args[0] === "findings") {
+  findingsReport();
 } else if (args[0] === "blog") {
   blogDraft();
 } else if (args[0] === "init") {
@@ -172,6 +183,38 @@ function validateConfig() {
   console.log(`✓ config ok: ${config.configPath || "(defaults)"}`);
   console.log(`Workspace: ${config.workspace}`);
   console.log(`Agents: ${config.agents.map((agent) => agent.id).join(", ")}`);
+}
+
+function listSessions() {
+  const config = loadConfig({
+    configPath: valueAfter("--config"),
+    sessionName: valueAfter("--session"),
+    modelOverrides: cliModelOverrides(),
+    cwd: process.cwd()
+  });
+  const dir = resolve(valueAfter("--dir") || config.transcriptDir);
+  console.log(formatSessionList(listTranscriptFiles(dir)));
+}
+
+function replaySession() {
+  const transcriptPath = args[1];
+  if (!transcriptPath) {
+    console.error("Usage: agent-deck replay <transcript.md> [--limit 40]");
+    process.exitCode = 1;
+    return;
+  }
+  console.log(buildReplayFromFile(transcriptPath, { limit: valueAfter("--limit") || 40 }));
+}
+
+function findingsReport() {
+  const transcriptPath = args[1];
+  if (!transcriptPath) {
+    console.error("Usage: agent-deck findings <transcript.md> [--out findings.md]");
+    process.exitCode = 1;
+    return;
+  }
+  const target = writeFindingsReport({ transcriptPath, outPath: valueAfter("--out") });
+  console.log(`Created ${target}`);
 }
 
 function blogDraft() {
