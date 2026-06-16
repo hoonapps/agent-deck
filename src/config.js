@@ -31,6 +31,7 @@ export function loadConfig({ configPath, sessionName, modelOverrides = {}, cwd =
     const overrideId = normalizeId(agent.id || agent.name || `agent-${index + 1}`);
     return normalizeAgent({ ...agent, model: modelForAgent(agent, overrideId, modelOverrides) }, workspace, index);
   });
+  validateAgents(agents);
 
   return {
     ...defaults,
@@ -40,7 +41,7 @@ export function loadConfig({ configPath, sessionName, modelOverrides = {}, cwd =
     transcriptDir,
     sessionName: sanitizeSessionName(sessionName || userConfig.sessionName || timestampName()),
     shareHistory: userConfig.shareHistory ?? defaults.shareHistory,
-    maxHistoryChars: userConfig.maxHistoryChars ?? defaults.maxHistoryChars,
+    maxHistoryChars: positiveInteger(userConfig.maxHistoryChars ?? defaults.maxHistoryChars, "maxHistoryChars"),
     testCommand: userConfig.testCommand ?? defaults.testCommand,
     agents
   };
@@ -54,6 +55,9 @@ export function normalizeAgent(agent, workspace, index = 0) {
     throw new Error(`Agent ${agent.id || index} must define a command`);
   }
   const id = normalizeId(agent.id || agent.name || `agent-${index + 1}`);
+  if (!id) {
+    throw new Error(`Agent at index ${index} must have a non-empty id or name`);
+  }
   const model = typeof agent.model === "string" && agent.model.trim() ? agent.model.trim() : undefined;
   const mode = agent.mode === "interactive" ? "interactive" : "turn";
   const rawArgs = normalizedArgs(agent, id, mode);
@@ -74,6 +78,29 @@ export function normalizeAgent(agent, workspace, index = 0) {
     env: agent.env && typeof agent.env === "object" ? agent.env : {},
     autoStart: agent.autoStart !== false
   };
+}
+
+export function validateAgents(agents) {
+  if (!Array.isArray(agents) || agents.length === 0) {
+    throw new Error("Configuration must define at least one agent");
+  }
+
+  const ids = new Set();
+  const aliases = new Map();
+  for (const agent of agents) {
+    if (ids.has(agent.id)) {
+      throw new Error(`Duplicate agent id "${agent.id}"`);
+    }
+    ids.add(agent.id);
+
+    for (const alias of agent.aliases) {
+      const owner = aliases.get(alias);
+      if (owner && owner !== agent.id) {
+        throw new Error(`Alias "${alias}" is used by both "${owner}" and "${agent.id}"`);
+      }
+      aliases.set(alias, agent.id);
+    }
+  }
 }
 
 export function parseComposerCommand(input, agentIds = []) {
@@ -170,7 +197,7 @@ function normalizeId(value) {
 function normalizeAliases(id, aliases = []) {
   const defaultAliases = id === "codex" ? ["co"] : id === "claude" ? ["cl"] : [id.slice(0, 2)];
   const preferred = aliases.length ? aliases : defaultAliases;
-  return [...new Set([...preferred, ...defaultAliases, id].map(normalizeId).filter(Boolean))];
+  return [...new Set([...preferred, id].map(normalizeId).filter(Boolean))];
 }
 
 function sanitizeSessionName(value) {
@@ -186,6 +213,14 @@ function timestampName() {
 
 function splitArgs(input) {
   return input.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, "")) || [];
+}
+
+function positiveInteger(value, name) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return parsed;
 }
 
 export function parseModelOverrides(values = []) {

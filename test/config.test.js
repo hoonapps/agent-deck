@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { cleanTurnOutput, shellCommand } from "../src/agent.js";
-import { normalizeAgent, parseComposerCommand, parseModelOverrides, runtimeSetAgentModel } from "../src/config.js";
+import {
+  loadConfig,
+  normalizeAgent,
+  parseComposerCommand,
+  parseModelOverrides,
+  runtimeSetAgentModel,
+  validateAgents
+} from "../src/config.js";
 
 test("parseComposerCommand treats plain text as a note for the active chat", () => {
   assert.deepEqual(parseComposerCommand("review this diff"), {
@@ -84,11 +94,53 @@ test("normalizeAgent inserts codex model before stdin prompt marker", () => {
 });
 
 test("normalizeAgent prefers configured aliases for display routing", () => {
-  assert.deepEqual(normalizeAgent({ id: "echo-a", aliases: ["ea"], command: "node" }, "/tmp/work", 0).aliases, [
-    "ea",
-    "ec",
-    "echo-a"
-  ]);
+  assert.deepEqual(normalizeAgent({ id: "echo-a", aliases: ["ea"], command: "node" }, "/tmp/work", 0).aliases, ["ea", "echo-a"]);
+});
+
+test("validateAgents rejects empty agent lists", () => {
+  assert.throws(() => validateAgents([]), /at least one agent/);
+});
+
+test("validateAgents rejects duplicate ids and aliases", () => {
+  assert.throws(
+    () =>
+      validateAgents([
+        normalizeAgent({ id: "codex", command: "codex" }, "/tmp/work", 0),
+        normalizeAgent({ id: "codex", command: "codex" }, "/tmp/work", 1)
+      ]),
+    /Duplicate agent id/
+  );
+
+  assert.throws(
+    () =>
+      validateAgents([
+        normalizeAgent({ id: "alpha", aliases: ["agent"], command: "node" }, "/tmp/work", 0),
+        normalizeAgent({ id: "beta", aliases: ["agent"], command: "node" }, "/tmp/work", 1)
+      ]),
+    /Alias "agent"/
+  );
+});
+
+test("loadConfig normalizes numeric config and rejects invalid history sizes", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-config-"));
+  const configPath = join(dir, "agent-deck.config.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      maxHistoryChars: "12000",
+      agents: [{ id: "echo", command: "node", args: ["-e", "process.exit(0)"] }]
+    })
+  );
+  assert.equal(loadConfig({ configPath, cwd: dir }).maxHistoryChars, 12000);
+
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      maxHistoryChars: 0,
+      agents: [{ id: "echo", command: "node", args: ["-e", "process.exit(0)"] }]
+    })
+  );
+  assert.throws(() => loadConfig({ configPath, cwd: dir }), /maxHistoryChars must be a positive integer/);
 });
 
 test("parseModelOverrides maps agent ids to models", () => {

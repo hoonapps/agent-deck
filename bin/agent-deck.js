@@ -17,6 +17,7 @@ Usage:
   agent-deck [--config agent-deck.config.json] [--session name]
              [--model codex=gpt-5.3-codex] [--codex-model gpt-5.3-codex] [--claude-model sonnet]
   agent-deck doctor
+  agent-deck validate
   agent-deck init
 
 Shortcuts:
@@ -106,6 +107,8 @@ if (args.includes("-h") || args.includes("--help")) {
   printHelp();
 } else if (args[0] === "doctor") {
   await doctor();
+} else if (args[0] === "validate") {
+  validateConfig();
 } else if (args[0] === "init") {
   initConfig();
 } else {
@@ -124,6 +127,18 @@ function cliModelOverrides() {
     ...singleModelOverride("codex", "--codex-model"),
     ...singleModelOverride("claude", "--claude-model")
   };
+}
+
+function validateConfig() {
+  const config = loadConfig({
+    configPath: valueAfter("--config"),
+    sessionName: valueAfter("--session"),
+    modelOverrides: cliModelOverrides(),
+    cwd: process.cwd()
+  });
+  console.log(`✓ config ok: ${config.configPath || "(defaults)"}`);
+  console.log(`Workspace: ${config.workspace}`);
+  console.log(`Agents: ${config.agents.map((agent) => agent.id).join(", ")}`);
 }
 
 function singleModelOverride(agent, flag) {

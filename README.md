@@ -60,6 +60,24 @@ Create a repo-local config:
 agent-deck init
 ```
 
+Check whether the configured agent CLIs are available:
+
+```bash
+agent-deck doctor
+```
+
+Validate config without opening the TUI:
+
+```bash
+agent-deck validate
+```
+
+For a CLI-only smoke test without Codex or Claude installed, run the demo config:
+
+```bash
+agent-deck --config examples/demo.config.json
+```
+
 ## Shortcuts
 
 | Key | Action |
@@ -127,6 +145,8 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
 
 Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `mode`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
 
+Agent ids and aliases must be unique. Agent Deck validates this at startup so routing commands do not silently target the wrong process.
+
 Model precedence is:
 
 ```text
@@ -184,6 +204,13 @@ npm install
 npm test
 npm run lint
 ```
+
+## Documentation
+
+- [Configuration reference](docs/CONFIGURATION.md)
+- [Architecture notes](docs/ARCHITECTURE.md)
+- [Workflow playbook](docs/WORKFLOWS.md)
+- [Roadmap](docs/ROADMAP.md)
 
 ## Status
 

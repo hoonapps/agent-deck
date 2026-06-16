@@ -1,0 +1,88 @@
+# Workflow Playbook
+
+These workflows are the practical reason Agent Deck exists: one human can route
+work between multiple coding agents without juggling separate terminals.
+
+## 1. Review With Two Agents
+
+Use Codex for implementation review and Claude for a second opinion:
+
+```text
+/co Review the current diff. Focus on correctness and tests.
+/cl Read the same diff and look for product or UX risks.
+/git
+/test
+```
+
+Because `shareHistory` is enabled by default, the second agent receives recent
+conversation context automatically.
+
+## 2. Implementation Then Critique
+
+Use one agent to make progress and another to challenge it:
+
+```text
+/co Implement the narrowest fix for the failing test.
+/test
+/cl Review the changed files and point out regressions.
+/co Apply only the review items that are clearly correct.
+```
+
+The human still decides which review items to apply. Agent Deck coordinates the
+conversation; it does not replace review judgment.
+
+## 3. Backend Deep-Dive Session
+
+For architecture or backend work:
+
+```text
+/co Map the current request flow and identify transaction boundaries.
+/cl Challenge the design from observability, retries, and data consistency.
+/all Propose the smallest next experiment we can verify locally.
+```
+
+This pattern works well when designing queues, outbox flows, RAG pipelines, or
+agent runtimes.
+
+## 4. Safe Demo Without Provider CLIs
+
+Use the included echo agents to verify the TUI and transcript flow:
+
+```bash
+agent-deck --config examples/demo.config.json --session demo
+```
+
+Then type:
+
+```text
+/ea hello
+/eb summarize the previous message
+/history
+```
+
+This is useful for checking terminal compatibility before configuring real
+agents.
+
+## 5. Session Hygiene
+
+Before a real session:
+
+```bash
+agent-deck doctor
+git status --short
+```
+
+During a session:
+
+```text
+/git
+/test
+/models
+```
+
+After a session:
+
+- Read the transcript under `.agent-deck/sessions`.
+- Commit code changes separately from transcript files.
+- Keep `.agent-deck/` ignored unless you intentionally want to publish a session
+  log.
