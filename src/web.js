@@ -51,13 +51,13 @@ async function handleDashboardRequest({ request, response, root, title }) {
   if (url.pathname === "/session-state" && request.method === "POST") {
     const form = new URLSearchParams(await readRequestBody(request));
     const session = updateSessionStatus(root, form.get("file"), form.get("status"));
-    redirect(response, `/?${queryString({ session: session.name, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus") })}`);
+    redirect(response, `/?${queryString({ session: session.name, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus"), window: form.get("window") })}`);
     return;
   }
   if (url.pathname === "/finding-state" && request.method === "POST") {
     const form = new URLSearchParams(await readRequestBody(request));
     const finding = updateFindingStatus(root, form.get("file"), form.get("finding"), form.get("status"));
-    redirect(response, `/?${queryString({ session: finding.session, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus") })}`);
+    redirect(response, `/?${queryString({ session: finding.session, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus"), window: form.get("window") })}`);
     return;
   }
   if (url.pathname === "/export/findings") {
@@ -217,6 +217,11 @@ function renderTrends(trends, selectedName) {
 function renderTrendFilters(trends, selectedName) {
   return `<form class="filters trend-filters" method="get" action="/">
     ${selectedName ? `<input type="hidden" name="session" value="${escapeHtml(selectedName)}">` : ""}
+    <label>Window
+      <select name="window">
+        ${renderOptions(trends.filterOptions.windows, trends.filters.window)}
+      </select>
+    </label>
     <label>Severity
       <select name="severity">
         ${renderOptions(["all", ...trends.filterOptions.severities], trends.filters.severity)}
@@ -297,6 +302,7 @@ function renderSessionDetail(session) {
 function renderFilters(session) {
   return `<form class="filters" method="get" action="/">
     <input type="hidden" name="session" value="${escapeHtml(session.name)}">
+    <input type="hidden" name="window" value="${escapeHtml(session.filters.window)}">
     <label>Severity
       <select name="severity">
         ${renderOptions(["all", ...session.filterOptions.severities], session.filters.severity)}
@@ -323,6 +329,7 @@ function renderStatusForm(session) {
     <input type="hidden" name="severity" value="${escapeHtml(session.filters.severity)}">
     <input type="hidden" name="agent" value="${escapeHtml(session.filters.agent)}">
     <input type="hidden" name="findingStatus" value="${escapeHtml(session.filters.status)}">
+    <input type="hidden" name="window" value="${escapeHtml(session.filters.window)}">
     <span>Session</span>
     ${SESSION_STATUSES.map(
       (status) =>
@@ -364,6 +371,7 @@ function renderFindingStatusForm(finding) {
     <input type="hidden" name="severity" value="${escapeHtml(finding.filters.severity)}">
     <input type="hidden" name="agent" value="${escapeHtml(finding.filters.agent)}">
     <input type="hidden" name="findingStatus" value="${escapeHtml(finding.filters.status)}">
+    <input type="hidden" name="window" value="${escapeHtml(finding.filters.window)}">
     ${FINDING_STATUSES.map(
       (status) =>
         `<button type="submit" name="status" value="${status}" class="finding-status ${status}${finding.status === status ? " active" : ""}" title="${status}">${status}</button>`
@@ -430,14 +438,18 @@ function reviewInbox(root) {
 }
 
 function reviewTrends(root, filters = {}) {
-  const sessions = sessionList(root);
-  const allFindings = allSessionFindings(root, sessions);
+  const allSessions = sessionList(root);
+  const allFindings = allSessionFindings(root, allSessions);
   const normalizedFilters = normalizeFilters(filters);
-  const findings = filterFindings(allFindings, normalizedFilters);
+  const sessions = filterSessionsByWindow(allSessions, normalizedFilters.window);
+  const windowSessionNames = new Set(sessions.map((session) => session.name));
+  const windowFindings = allFindings.filter((finding) => windowSessionNames.has(finding.session));
+  const findings = filterFindings(windowFindings, normalizedFilters);
   return {
     total: findings.length,
     sessions: uniqueSorted(findings.map((finding) => finding.session)).length,
-    scannedSessions: sessions.length,
+    scannedSessions: allSessions.length,
+    windowSessions: sessions.length,
     locations: groupLocationTrends(findings),
     agents: groupCountTrends(findings, (finding) => finding.agent || "unknown"),
     severities: groupCountTrends(findings, (finding) => finding.severity || "unknown"),
@@ -446,7 +458,8 @@ function reviewTrends(root, filters = {}) {
     filterOptions: {
       severities: uniqueSorted(allFindings.map((finding) => finding.severity)),
       agents: uniqueSorted(allFindings.map((finding) => finding.agent)),
-      statuses: uniqueSorted(allFindings.map((finding) => finding.status))
+      statuses: uniqueSorted(allFindings.map((finding) => finding.status)),
+      windows: ["all", "today", "recent:5", "recent:10"]
     }
   };
 }
@@ -456,6 +469,40 @@ function allSessionFindings(root, sessions = sessionList(root)) {
     const detail = sessionDetails(root, session.name);
     return detail ? detail.allFindings.map((finding) => ({ ...finding, sessionModifiedAt: session.modifiedAt })) : [];
   });
+}
+
+function filterSessionsByWindow(sessions, window) {
+  const normalized = normalizeTrendWindow(window);
+  if (normalized === "all") return sessions;
+  if (normalized.startsWith("recent:")) {
+    const count = Number(normalized.slice("recent:".length));
+    return sessions.slice(0, count);
+  }
+  if (normalized === "today") {
+    const today = localDateKey(new Date());
+    return sessions.filter((session) => localDateKey(new Date(session.modifiedAt)) === today);
+  }
+  if (normalized.startsWith("since:")) {
+    const since = normalized.slice("since:".length);
+    return sessions.filter((session) => localDateKey(new Date(session.modifiedAt)) >= since);
+  }
+  return sessions;
+}
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeTrendWindow(value) {
+  const window = String(value || "all").toLowerCase().trim();
+  if (window === "all" || window === "today") return window;
+  const recent = window.match(/^recent:(\d{1,3})$/);
+  if (recent) return `recent:${Math.max(1, Number(recent[1]))}`;
+  const since = window.match(/^since:\d{4}-\d{2}-\d{2}$/);
+  return since ? window : "all";
 }
 
 function groupLocationTrends(findings) {
@@ -661,7 +708,8 @@ function filtersFromParams(params) {
   return {
     severity: params.get("severity") || "all",
     agent: params.get("agent") || "all",
-    status: params.get("status") || "all"
+    status: params.get("status") || "all",
+    window: params.get("window") || "all"
   };
 }
 
@@ -669,7 +717,8 @@ function normalizeFilters(filters = {}) {
   return {
     severity: filters.severity || "all",
     agent: filters.agent || "all",
-    status: filters.status || "all"
+    status: filters.status || "all",
+    window: normalizeTrendWindow(filters.window)
   };
 }
 

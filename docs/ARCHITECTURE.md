@@ -123,7 +123,9 @@ items above the selected session detail and through `GET /api/inbox`.
 The review trends panel uses the same read path and groups findings by
 location, agent, severity, and status without writing new state. It applies the
 same normalized query filters as session detail, so the trend panel and the
-selected session stay in the same review context.
+selected session stay in the same review context. Time windows are applied to
+the session list before finding filters, which keeps `scannedSessions`,
+`windowSessions`, and filtered session counts distinct.
 
 ## Safety Boundaries
 

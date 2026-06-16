@@ -128,7 +128,8 @@ Use the Review Inbox at the top of the dashboard to keep open high-severity
 findings visible across sessions.
 Use Review Trends to spot repeated locations, noisy agents, and status buildup
 before opening individual sessions. Apply severity, agent, or status filters
-when the trend needs to focus on unresolved work.
+when the trend needs to focus on unresolved work. Use the window selector for
+recent sessions or today's review slice.
 
 - Generate a first blog draft when the session is worth publishing:
 

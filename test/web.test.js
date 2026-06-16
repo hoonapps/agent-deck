@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { dashboardModel, startDashboard } from "../src/web.js";
@@ -64,8 +64,8 @@ END_AGENT_DECK_FINDINGS_JSON
 
 test("dashboardModel summarizes sessions, replay, and findings", () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
-  writeFileSync(join(dir, "review.md"), sampleTranscript);
-  writeFileSync(join(dir, "follow-up.md"), secondTranscript);
+  writeSessionFile(dir, "review.md", sampleTranscript, "2026-06-15T00:00:00.000Z");
+  writeSessionFile(dir, "follow-up.md", secondTranscript, "2026-06-16T00:00:00.000Z");
 
   const model = dashboardModel({ transcriptDir: dir, selectedName: "review.md" });
 
@@ -87,7 +87,9 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.trends.locations[0].sessions, 2);
   assert.equal(model.trends.severities.find((item) => item.label === "high")?.count, 2);
   assert.equal(model.trends.scannedSessions, 2);
+  assert.equal(model.trends.windowSessions, 2);
   assert.equal(model.trends.filters.status, "all");
+  assert.equal(model.trends.filters.window, "all");
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
@@ -97,12 +99,20 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(filtered.trends.filters.severity, "high");
   assert.equal(filtered.trends.filters.agent, "claude");
   assert.equal(filtered.trends.agents[0].label, "claude");
+
+  const recent = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { window: "recent:1" } });
+  assert.equal(recent.trends.total, 2);
+  assert.equal(recent.trends.sessions, 1);
+  assert.equal(recent.trends.scannedSessions, 2);
+  assert.equal(recent.trends.windowSessions, 1);
+  assert.equal(recent.trends.filters.window, "recent:1");
+  assert.equal(recent.trends.agents[0].label, "codex");
 });
 
 test("startDashboard serves HTML and JSON APIs", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
-  writeFileSync(join(dir, "review.md"), sampleTranscript);
-  writeFileSync(join(dir, "follow-up.md"), secondTranscript);
+  writeSessionFile(dir, "review.md", sampleTranscript, "2026-06-15T00:00:00.000Z");
+  writeSessionFile(dir, "follow-up.md", secondTranscript, "2026-06-16T00:00:00.000Z");
 
   const { server, url } = await startDashboard({ transcriptDir: dir, title: "Agent Deck Web", port: 0 });
   try {
@@ -140,6 +150,7 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     const trends = await fetchJson(new URL("/api/trends", url));
     assert.equal(trends.total, 4);
     assert.equal(trends.scannedSessions, 2);
+    assert.equal(trends.windowSessions, 2);
     assert.equal(trends.locations[0].label, "src/app.js:12");
     assert.equal(trends.locations[0].open, 2);
     assert.equal(trends.locations[0].sessions, 2);
@@ -153,10 +164,24 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.equal(codexOpenTrends.agents.length, 1);
     assert.equal(codexOpenTrends.agents[0].label, "codex");
 
+    const recentTrends = await fetchJson(new URL("/api/trends?window=recent:1", url));
+    assert.equal(recentTrends.total, 2);
+    assert.equal(recentTrends.sessions, 1);
+    assert.equal(recentTrends.windowSessions, 1);
+    assert.equal(recentTrends.filters.window, "recent:1");
+
+    const sinceTrends = await fetchJson(new URL("/api/trends?window=since:2026-06-16", url));
+    assert.equal(sinceTrends.total, 2);
+    assert.equal(sinceTrends.sessions, 1);
+    assert.equal(sinceTrends.filters.window, "since:2026-06-16");
+
     const filteredHtml = await fetchText(new URL("/?session=review.md&agent=codex&status=open", url));
     assert.match(filteredHtml, /3 findings across 2 sessions/);
     assert.match(filteredHtml, /<option value="codex" selected>codex<\/option>/);
     assert.match(filteredHtml, /<option value="open" selected>open<\/option>/);
+
+    const windowHtml = await fetchText(new URL("/?session=review.md&window=recent:5", url));
+    assert.match(windowHtml, /<option value="recent:5" selected>recent:5<\/option>/);
 
     const filtered = await fetchJson(new URL("/api/session?file=review.md&severity=medium&agent=codex", url));
     assert.equal(filtered.findings.length, 1);
@@ -283,4 +308,11 @@ async function postJson(url, payload) {
   });
   assert.equal(response.status, 200);
   return response.json();
+}
+
+function writeSessionFile(dir, name, content, modifiedAt) {
+  const path = join(dir, name);
+  writeFileSync(path, content);
+  const time = new Date(modifiedAt);
+  utimesSync(path, time, time);
 }

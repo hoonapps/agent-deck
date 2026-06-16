@@ -215,6 +215,8 @@ It also shows a review inbox for `open` + `high` findings across all saved
 sessions, exposed as `GET /api/inbox`. Cross-session trend counts for location,
 agent, severity, and finding status are exposed as `GET /api/trends`, with the
 same `severity`, `agent`, and `status` query filters used by session detail.
+Trend queries also accept `window=recent:N`, `window=today`, or
+`window=since:YYYY-MM-DD` to limit the scanned session set.
 
 Use the CLI blog helper to turn a transcript into a Korean draft:
 
