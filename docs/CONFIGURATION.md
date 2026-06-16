@@ -204,12 +204,13 @@ agent-deck web --host 127.0.0.1 --port 4545
 ```
 
 The dashboard can mark sessions as `draft`, `published`, or `deferred`. Marker
-state is stored next to transcripts in `.agent-deck-session-state.json`; the
-transcript Markdown files are not rewritten.
+state is stored next to transcripts in `.agent-deck-session-state.json`.
+Findings can be marked `open`, `accepted`, `fixed`, or `ignored` from the same
+dashboard. The transcript Markdown files are not rewritten.
 
 The dashboard renders the same replay and findings data as the CLI. It can
-filter findings by severity or agent and download filtered findings or a Korean
-blog draft for the selected session.
+filter findings by severity, agent, or finding status and download filtered
+findings or a Korean blog draft for the selected session.
 
 Use the CLI blog helper to turn a transcript into a Korean draft:
 

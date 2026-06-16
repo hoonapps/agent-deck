@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { URL } from "node:url";
@@ -7,6 +8,7 @@ import { buildReplay, extractReviewFindings, formatFindingsMarkdown, listTranscr
 
 const SESSION_STATE_FILE = ".agent-deck-session-state.json";
 const SESSION_STATUSES = ["draft", "published", "deferred"];
+const FINDING_STATUSES = ["open", "accepted", "fixed", "ignored"];
 
 export function createDashboardServer({ transcriptDir, title = "Agent Deck Dashboard" }) {
   const root = resolve(transcriptDir);
@@ -33,10 +35,21 @@ async function handleDashboardRequest({ request, response, root, title }) {
     sendJson(response, updateSessionStatus(root, payload.file, payload.status));
     return;
   }
+  if (url.pathname === "/api/finding-state" && request.method === "POST") {
+    const payload = JSON.parse(await readRequestBody(request));
+    sendJson(response, updateFindingStatus(root, payload.file, payload.finding, payload.status));
+    return;
+  }
   if (url.pathname === "/session-state" && request.method === "POST") {
     const form = new URLSearchParams(await readRequestBody(request));
     const session = updateSessionStatus(root, form.get("file"), form.get("status"));
-    redirect(response, `/?${queryString({ session: session.name, severity: form.get("severity"), agent: form.get("agent") })}`);
+    redirect(response, `/?${queryString({ session: session.name, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus") })}`);
+    return;
+  }
+  if (url.pathname === "/finding-state" && request.method === "POST") {
+    const form = new URLSearchParams(await readRequestBody(request));
+    const finding = updateFindingStatus(root, form.get("file"), form.get("finding"), form.get("status"));
+    redirect(response, `/?${queryString({ session: finding.session, severity: form.get("severity"), agent: form.get("agent"), status: form.get("findingStatus") })}`);
     return;
   }
   if (url.pathname === "/export/findings") {
@@ -151,7 +164,7 @@ function renderSessionDetail(session) {
       ${renderFilters(session)}
       ${renderStatusForm(session)}
       <div class="downloads">
-        <a href="/export/findings?${queryString({ file: session.name, severity: session.filters.severity, agent: session.filters.agent })}">Download findings</a>
+        <a href="/export/findings?${queryString({ file: session.name, severity: session.filters.severity, agent: session.filters.agent, status: session.filters.status })}">Download findings</a>
         <a href="/export/blog?${queryString({ file: session.name })}">Download blog draft</a>
       </div>
     </div>
@@ -181,6 +194,11 @@ function renderFilters(session) {
         ${renderOptions(["all", ...session.filterOptions.agents], session.filters.agent)}
       </select>
     </label>
+    <label>Status
+      <select name="status">
+        ${renderOptions(["all", ...FINDING_STATUSES], session.filters.status)}
+      </select>
+    </label>
     <button type="submit">Apply</button>
     <a href="/?session=${encodeURIComponent(session.name)}">Reset</a>
   </form>`;
@@ -191,6 +209,7 @@ function renderStatusForm(session) {
     <input type="hidden" name="file" value="${escapeHtml(session.name)}">
     <input type="hidden" name="severity" value="${escapeHtml(session.filters.severity)}">
     <input type="hidden" name="agent" value="${escapeHtml(session.filters.agent)}">
+    <input type="hidden" name="findingStatus" value="${escapeHtml(session.filters.status)}">
     <span>Session</span>
     ${SESSION_STATUSES.map(
       (status) =>
@@ -212,6 +231,7 @@ function renderFindings(findings) {
       (finding) => `<tr>
         <td>${finding.id}</td>
         <td><span class="severity ${escapeHtml(finding.severity)}">${escapeHtml(finding.severity)}</span></td>
+        <td>${renderFindingStatusForm(finding)}</td>
         <td>${escapeHtml(finding.agent)}</td>
         <td>${escapeHtml(finding.location || "-")}</td>
         <td>${escapeHtml(finding.summary)}</td>
@@ -219,9 +239,23 @@ function renderFindings(findings) {
     )
     .join("");
   return `<table>
-    <thead><tr><th>#</th><th>Severity</th><th>Agent</th><th>Location</th><th>Summary</th></tr></thead>
+    <thead><tr><th>#</th><th>Severity</th><th>Status</th><th>Agent</th><th>Location</th><th>Summary</th></tr></thead>
     <tbody>${rows}</tbody>
   </table>`;
+}
+
+function renderFindingStatusForm(finding) {
+  return `<form class="finding-markers" method="post" action="/finding-state">
+    <input type="hidden" name="file" value="${escapeHtml(finding.session)}">
+    <input type="hidden" name="finding" value="${escapeHtml(finding.key)}">
+    <input type="hidden" name="severity" value="${escapeHtml(finding.filters.severity)}">
+    <input type="hidden" name="agent" value="${escapeHtml(finding.filters.agent)}">
+    <input type="hidden" name="findingStatus" value="${escapeHtml(finding.filters.status)}">
+    ${FINDING_STATUSES.map(
+      (status) =>
+        `<button type="submit" name="status" value="${status}" class="finding-status ${status}${finding.status === status ? " active" : ""}" title="${status}">${status}</button>`
+    ).join("")}
+  </form>`;
 }
 
 function sessionList(root) {
@@ -243,8 +277,13 @@ function sessionDetails(root, requestedName, filters = {}) {
   const path = resolve(root, safeName);
   const markdown = readFileSync(path, "utf8");
   const entries = parseTranscriptEntries(markdown);
-  const allFindings = extractReviewFindings(entries);
+  const state = readSessionState(root);
   const normalizedFilters = normalizeFilters(filters);
+  const allFindings = attachFindingState(extractReviewFindings(entries), {
+    session: selected.name,
+    state: state[selected.name],
+    filters: normalizedFilters
+  });
   const findings = filterFindings(allFindings, normalizedFilters);
   return {
     ...selected,
@@ -261,7 +300,8 @@ function sessionDetails(root, requestedName, filters = {}) {
     filters: normalizedFilters,
     filterOptions: {
       severities: uniqueSorted(allFindings.map((finding) => finding.severity)),
-      agents: uniqueSorted(allFindings.map((finding) => finding.agent))
+      agents: uniqueSorted(allFindings.map((finding) => finding.agent)),
+      statuses: uniqueSorted(allFindings.map((finding) => finding.status))
     }
   };
 }
@@ -280,11 +320,30 @@ function updateSessionStatus(root, requestedName, requestedStatus) {
   if (!selected) throw new Error("Unknown session");
   const state = readSessionState(root);
   state[selected.name] = {
+    ...state[selected.name],
     status,
     updatedAt: new Date().toISOString()
   };
   writeSessionState(root, state);
   return { ...selected, status, statusUpdatedAt: state[selected.name].updatedAt };
+}
+
+function updateFindingStatus(root, requestedName, requestedKey, requestedStatus) {
+  const safeName = basename(requestedName || "");
+  const status = normalizeFindingStatus(requestedStatus);
+  const session = sessionDetails(root, safeName);
+  if (!session) throw new Error("Unknown session");
+  const selected = session.allFindings.find((finding) => finding.key === requestedKey);
+  if (!selected) throw new Error("Unknown finding");
+  const state = readSessionState(root);
+  const current = normalizeSessionState(state[session.name]) || defaultSessionState();
+  current.findings[selected.key] = {
+    status,
+    updatedAt: new Date().toISOString()
+  };
+  state[session.name] = current;
+  writeSessionState(root, state);
+  return { ...selected, status, statusUpdatedAt: current.findings[selected.key].updatedAt };
 }
 
 function readSessionState(root) {
@@ -312,6 +371,32 @@ function normalizeSessionState(value) {
   if (!value || typeof value !== "object") return null;
   return {
     status: normalizeSessionStatus(value.status),
+    updatedAt: String(value.updatedAt || ""),
+    findings: normalizeFindingStates(value.findings)
+  };
+}
+
+function defaultSessionState() {
+  return {
+    status: "draft",
+    updatedAt: "",
+    findings: {}
+  };
+}
+
+function normalizeFindingStates(value) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(value)
+      .map(([key, finding]) => [String(key), normalizeFindingState(finding)])
+      .filter(([, finding]) => finding)
+  );
+}
+
+function normalizeFindingState(value) {
+  if (!value || typeof value !== "object") return null;
+  return {
+    status: normalizeFindingStatus(value.status),
     updatedAt: String(value.updatedAt || "")
   };
 }
@@ -319,6 +404,33 @@ function normalizeSessionState(value) {
 function normalizeSessionStatus(value) {
   const status = String(value || "draft").toLowerCase().trim();
   return SESSION_STATUSES.includes(status) ? status : "draft";
+}
+
+function normalizeFindingStatus(value) {
+  const status = String(value || "open").toLowerCase().trim();
+  return FINDING_STATUSES.includes(status) ? status : "open";
+}
+
+function attachFindingState(findings, { session, state, filters }) {
+  const findingState = state?.findings || {};
+  return findings.map((finding) => {
+    const key = findingKey(finding);
+    return {
+      ...finding,
+      key,
+      session,
+      status: findingState[key]?.status || "open",
+      statusUpdatedAt: findingState[key]?.updatedAt || "",
+      filters
+    };
+  });
+}
+
+function findingKey(finding) {
+  return createHash("sha1")
+    .update([finding.agent, finding.severity, finding.location || "", finding.summary].join("\n"))
+    .digest("hex")
+    .slice(0, 12);
 }
 
 function selectSession(sessions, requestedName) {
@@ -369,14 +481,16 @@ function readRequestBody(request, maxBytes = 64 * 1024) {
 function filtersFromParams(params) {
   return {
     severity: params.get("severity") || "all",
-    agent: params.get("agent") || "all"
+    agent: params.get("agent") || "all",
+    status: params.get("status") || "all"
   };
 }
 
 function normalizeFilters(filters = {}) {
   return {
     severity: filters.severity || "all",
-    agent: filters.agent || "all"
+    agent: filters.agent || "all",
+    status: filters.status || "all"
   };
 }
 
@@ -384,7 +498,8 @@ function filterFindings(findings, filters) {
   return findings.filter((finding) => {
     const severityOk = filters.severity === "all" || finding.severity === filters.severity;
     const agentOk = filters.agent === "all" || finding.agent === filters.agent;
-    return severityOk && agentOk;
+    const statusOk = filters.status === "all" || finding.status === filters.status;
+    return severityOk && agentOk && statusOk;
   });
 }
 
@@ -434,7 +549,7 @@ function dashboardCss() {
     .session span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
     .detail { padding: 18px; min-width: 0; }
     .actions { display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding: 14px 0; }
-    .filters, .downloads, .markers { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .filters, .downloads, .markers, .finding-markers { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
     label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
     select, button, .downloads a, .filters a { border: 1px solid var(--line); background: #11151a; color: var(--text); padding: 7px 9px; text-decoration: none; font: inherit; }
     button { cursor: pointer; }
@@ -446,6 +561,13 @@ function dashboardCss() {
     .status.deferred { color: var(--warn); }
     .marker.published.active { color: var(--ok); border-color: var(--ok); }
     .marker.deferred.active { color: var(--warn); border-color: var(--warn); }
+    .finding-markers { min-width: 260px; gap: 5px; }
+    .finding-status { min-width: 26px; max-width: 34px; overflow: hidden; padding: 4px 6px; color: transparent; border-color: var(--line); position: relative; }
+    .finding-status::first-letter { color: var(--muted); text-transform: uppercase; }
+    .finding-status.active { border-color: var(--accent); background: #0e2324; }
+    .finding-status.accepted.active { border-color: var(--blue); background: #102035; }
+    .finding-status.fixed.active { border-color: var(--ok); background: #10271c; }
+    .finding-status.ignored.active { border-color: var(--quiet); background: #171a1f; }
     .panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 18px; }
     .panes section { padding: 16px; overflow: auto; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d8e3f0; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

@@ -112,8 +112,8 @@ agent-deck web --port 4545
 ```
 
 The dashboard supports `draft`, `published`, and `deferred` session markers,
-severity/agent filters, and download links for findings Markdown and Korean
-blog drafts.
+finding markers (`open`, `accepted`, `fixed`, `ignored`), severity/agent/status
+filters, and download links for findings Markdown and Korean blog drafts.
 
 Create a blog draft from an existing transcript:
 

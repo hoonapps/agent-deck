@@ -42,6 +42,8 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.selected.allFindings.length, 2);
   assert.equal(model.selected.findings.length, 2);
   assert.equal(model.selected.status, "draft");
+  assert.equal(model.selected.findings[0].status, "open");
+  assert.match(model.selected.findings[0].key, /^[a-f0-9]{12}$/);
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
@@ -60,6 +62,7 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /review\.md/);
     assert.match(html, /src\/app\.js:12/);
     assert.match(html, /class="status draft"/);
+    assert.match(html, /class="finding-status open active"/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
     assert.equal(sessions[0].name, "review.md");
@@ -69,6 +72,8 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.equal(session.name, "review.md");
     assert.equal(session.findings.length, 2);
     assert.equal(session.status, "draft");
+    assert.equal(session.findings[0].status, "open");
+    assert.match(session.findings[0].key, /^[a-f0-9]{12}$/);
     assert.equal("markdown" in session, false);
     assert.equal("path" in session, false);
 
@@ -83,6 +88,47 @@ test("startDashboard serves HTML and JSON APIs", async () => {
 
     const blog = await fetchText(new URL("/export/blog?file=review.md", url));
     assert.match(blog, /내가 보낸 요청: 1개/);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("dashboard persists finding status markers", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
+  writeFileSync(join(dir, "review.md"), sampleTranscript);
+
+  const { server, url } = await startDashboard({ transcriptDir: dir, title: "Agent Deck Web", port: 0 });
+  try {
+    const session = await fetchJson(new URL("/api/session?file=review.md", url));
+    const target = session.findings[0];
+    const updated = await postJson(new URL("/api/finding-state", url), {
+      file: "../review.md",
+      finding: target.key,
+      status: "fixed"
+    });
+
+    assert.equal(updated.key, target.key);
+    assert.equal(updated.status, "fixed");
+    assert.match(updated.statusUpdatedAt, /^20/);
+
+    const stateFile = readFileSync(join(dir, ".agent-deck-session-state.json"), "utf8");
+    assert.match(stateFile, /"findings"/);
+    assert.match(stateFile, /"fixed"/);
+
+    const fixed = await fetchJson(new URL("/api/session?file=review.md&status=fixed", url));
+    assert.equal(fixed.findings.length, 1);
+    assert.equal(fixed.findings[0].key, target.key);
+
+    const open = await fetchJson(new URL("/api/session?file=review.md&status=open", url));
+    assert.equal(open.findings.length, 1);
+    assert.notEqual(open.findings[0].key, target.key);
+
+    const fixedExport = await fetchText(new URL("/export/findings?file=review.md&status=fixed", url));
+    assert.match(fixedExport, /src\/app\.js:12/);
+    assert.doesNotMatch(fixedExport, /Missing test/);
+
+    const html = await fetchText(new URL("/?session=review.md&status=fixed", url));
+    assert.match(html, /class="finding-status fixed active"/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
