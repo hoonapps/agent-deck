@@ -105,6 +105,11 @@ the same parser, exposes small JSON endpoints for session data, and keeps file
 selection constrained to transcript basenames under the configured transcript
 directory.
 
+The dashboard uses query-string filters for severity and agent. Export links
+serve generated Markdown directly from the selected transcript instead of
+writing files automatically, so browsing remains read-only unless the user saves
+the downloaded artifact.
+
 ## Safety Boundaries
 
 Agent Deck runs locally with the permissions of the current shell. It does not

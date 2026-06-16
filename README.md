@@ -26,6 +26,7 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Export review output as a findings table with `/findings` or `agent-deck findings`
 - List and replay saved transcripts from the CLI
 - Browse saved sessions, replay timelines, and findings in a local web dashboard
+- Filter dashboard findings by severity or agent, then download findings or blog drafts
 - Generate a Korean blog draft from a transcript with `agent-deck blog`
 - Configure agents per repository with `agent-deck.config.json`
 
@@ -105,6 +106,9 @@ Open the local web dashboard:
 ```bash
 agent-deck web --port 4545
 ```
+
+The dashboard supports severity/agent filters and download links for findings
+Markdown and Korean blog drafts.
 
 Create a blog draft from an existing transcript:
 

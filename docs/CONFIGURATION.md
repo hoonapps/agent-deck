@@ -184,6 +184,10 @@ Open the local dashboard when you want to inspect sessions in a browser:
 agent-deck web --host 127.0.0.1 --port 4545
 ```
 
+The dashboard renders the same replay and findings data as the CLI. It can
+filter findings by severity or agent and download filtered findings or a Korean
+blog draft for the selected session.
+
 Use the CLI blog helper to turn a transcript into a Korean draft:
 
 ```bash

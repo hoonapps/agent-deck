@@ -2,7 +2,8 @@ import { createServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { URL } from "node:url";
-import { buildReplay, extractReviewFindings, listTranscriptFiles, parseTranscriptEntries } from "./transcript-tools.js";
+import { buildBlogDraftFromTranscript } from "./blog.js";
+import { buildReplay, extractReviewFindings, formatFindingsMarkdown, listTranscriptFiles, parseTranscriptEntries } from "./transcript-tools.js";
 
 export function createDashboardServer({ transcriptDir, title = "Agent Deck Dashboard" }) {
   const root = resolve(transcriptDir);
@@ -14,11 +15,21 @@ export function createDashboardServer({ transcriptDir, title = "Agent Deck Dashb
         return;
       }
       if (url.pathname === "/api/session") {
-        sendJson(response, sessionDetails(root, url.searchParams.get("file")));
+        sendJson(response, publicSessionDetails(sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams))));
+        return;
+      }
+      if (url.pathname === "/export/findings") {
+        const session = sessionDetails(root, url.searchParams.get("file"), filtersFromParams(url.searchParams));
+        sendMarkdown(response, `${session?.name || "session"}-findings.md`, session ? formatFindingsMarkdown(session.findings, { sourcePath: session.path }) : "");
+        return;
+      }
+      if (url.pathname === "/export/blog") {
+        const session = sessionDetails(root, url.searchParams.get("file"));
+        sendMarkdown(response, `${session?.name || "session"}-blog-draft.md`, session ? buildBlogDraftFromTranscript(session.markdown, { title: titleFromSession(session.name), sourcePath: session.path }) : "");
         return;
       }
       if (url.pathname === "/") {
-        sendHtml(response, renderDashboard({ title, root, selectedName: url.searchParams.get("session") }));
+        sendHtml(response, renderDashboard({ title, root, selectedName: url.searchParams.get("session"), filters: filtersFromParams(url.searchParams) }));
         return;
       }
       response.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
@@ -43,19 +54,20 @@ export function startDashboard({ transcriptDir, title, host = "127.0.0.1", port 
   });
 }
 
-export function dashboardModel({ transcriptDir, selectedName } = {}) {
+export function dashboardModel({ transcriptDir, selectedName, filters = {} } = {}) {
   const root = resolve(transcriptDir);
   const sessions = sessionList(root);
   const selected = selectSession(sessions, selectedName);
   return {
     transcriptDir: root,
     sessions,
-    selected: selected ? sessionDetails(root, selected.name) : null
+    selected: selected ? sessionDetails(root, selected.name, filters) : null,
+    filters: normalizeFilters(filters)
   };
 }
 
-function renderDashboard({ title, root, selectedName }) {
-  const model = dashboardModel({ transcriptDir: root, selectedName });
+function renderDashboard({ title, root, selectedName, filters }) {
+  const model = dashboardModel({ transcriptDir: root, selectedName, filters });
   const selected = model.selected;
   return `<!doctype html>
 <html lang="en">
@@ -80,7 +92,7 @@ function renderDashboard({ title, root, selectedName }) {
     <section class="layout">
       <aside class="sessions" aria-label="Sessions">
         <h2>Sessions</h2>
-        ${renderSessionLinks(model.sessions, selected?.name)}
+        ${renderSessionLinks(model.sessions, selected?.name, model.filters)}
       </aside>
       <section class="detail" aria-label="Session detail">
         ${selected ? renderSessionDetail(selected) : "<p class=\"empty\">No transcript files found.</p>"}
@@ -91,12 +103,12 @@ function renderDashboard({ title, root, selectedName }) {
 </html>`;
 }
 
-function renderSessionLinks(sessions, selectedName) {
+function renderSessionLinks(sessions, selectedName, filters) {
   if (sessions.length === 0) return "<p class=\"empty\">No sessions yet.</p>";
   return sessions
     .map((session) => {
       const active = session.name === selectedName ? " active" : "";
-      return `<a class="session${active}" href="/?session=${encodeURIComponent(session.name)}">
+      return `<a class="session${active}" href="/?${queryString({ ...filters, session: session.name })}">
         <strong>${escapeHtml(session.name)}</strong>
         <span>${escapeHtml(session.modifiedAt)} · ${session.size} bytes</span>
       </a>`;
@@ -114,7 +126,14 @@ function renderSessionDetail(session) {
       <div class="stats">
         <span><strong>${session.counts.inputs}</strong> prompts</span>
         <span><strong>${session.counts.outputs}</strong> outputs</span>
-        <span><strong>${session.findings.length}</strong> findings</span>
+        <span><strong>${session.findings.length}</strong>/<strong>${session.allFindings.length}</strong> findings</span>
+      </div>
+    </div>
+    <div class="actions">
+      ${renderFilters(session)}
+      <div class="downloads">
+        <a href="/export/findings?${queryString({ file: session.name, severity: session.filters.severity, agent: session.filters.agent })}">Download findings</a>
+        <a href="/export/blog?${queryString({ file: session.name })}">Download blog draft</a>
       </div>
     </div>
     <div class="panes">
@@ -128,6 +147,30 @@ function renderSessionDetail(session) {
       </section>
     </div>
   `;
+}
+
+function renderFilters(session) {
+  return `<form class="filters" method="get" action="/">
+    <input type="hidden" name="session" value="${escapeHtml(session.name)}">
+    <label>Severity
+      <select name="severity">
+        ${renderOptions(["all", ...session.filterOptions.severities], session.filters.severity)}
+      </select>
+    </label>
+    <label>Agent
+      <select name="agent">
+        ${renderOptions(["all", ...session.filterOptions.agents], session.filters.agent)}
+      </select>
+    </label>
+    <button type="submit">Apply</button>
+    <a href="/?session=${encodeURIComponent(session.name)}">Reset</a>
+  </form>`;
+}
+
+function renderOptions(values, selected) {
+  return values
+    .map((value) => `<option value="${escapeHtml(value)}"${value === selected ? " selected" : ""}>${escapeHtml(value)}</option>`)
+    .join("");
 }
 
 function renderFindings(findings) {
@@ -157,23 +200,41 @@ function sessionList(root) {
   }));
 }
 
-function sessionDetails(root, requestedName) {
+function sessionDetails(root, requestedName, filters = {}) {
   const sessions = sessionList(root);
   const selected = selectSession(sessions, requestedName);
   if (!selected) return null;
   const safeName = basename(selected.name);
-  const markdown = readFileSync(resolve(root, safeName), "utf8");
+  const path = resolve(root, safeName);
+  const markdown = readFileSync(path, "utf8");
   const entries = parseTranscriptEntries(markdown);
+  const allFindings = extractReviewFindings(entries);
+  const normalizedFilters = normalizeFilters(filters);
+  const findings = filterFindings(allFindings, normalizedFilters);
   return {
     ...selected,
+    path,
+    markdown,
     counts: {
       inputs: entries.filter((entry) => entry.source.startsWith("input -> ")).length,
       outputs: entries.filter((entry) => entry.source.startsWith("output <- ")).length,
       tests: entries.filter((entry) => entry.source === "test").length
     },
     replay: buildReplay(markdown, { limit: 80 }),
-    findings: extractReviewFindings(entries)
+    allFindings,
+    findings,
+    filters: normalizedFilters,
+    filterOptions: {
+      severities: uniqueSorted(allFindings.map((finding) => finding.severity)),
+      agents: uniqueSorted(allFindings.map((finding) => finding.agent))
+    }
   };
+}
+
+function publicSessionDetails(session) {
+  if (!session) return null;
+  const { path: _path, markdown: _markdown, ...publicSession } = session;
+  return publicSession;
 }
 
 function selectSession(sessions, requestedName) {
@@ -190,6 +251,52 @@ function sendJson(response, value) {
 function sendHtml(response, value) {
   response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
   response.end(value);
+}
+
+function sendMarkdown(response, filename, value) {
+  response.writeHead(200, {
+    "content-type": "text/markdown; charset=utf-8",
+    "content-disposition": `attachment; filename="${basename(filename)}"`
+  });
+  response.end(value || "");
+}
+
+function filtersFromParams(params) {
+  return {
+    severity: params.get("severity") || "all",
+    agent: params.get("agent") || "all"
+  };
+}
+
+function normalizeFilters(filters = {}) {
+  return {
+    severity: filters.severity || "all",
+    agent: filters.agent || "all"
+  };
+}
+
+function filterFindings(findings, filters) {
+  return findings.filter((finding) => {
+    const severityOk = filters.severity === "all" || finding.severity === filters.severity;
+    const agentOk = filters.agent === "all" || finding.agent === filters.agent;
+    return severityOk && agentOk;
+  });
+}
+
+function uniqueSorted(values) {
+  return [...new Set(values.filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function queryString(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value && value !== "all") search.set(key, value);
+  }
+  return search.toString();
+}
+
+function titleFromSession(name) {
+  return basename(name || "session", ".md").replace(/[-_]+/g, " ");
 }
 
 function escapeHtml(value) {
@@ -221,6 +328,12 @@ function dashboardCss() {
     .session.active { border-color: var(--accent); }
     .session span { display: block; color: var(--muted); font-size: 12px; margin-top: 3px; }
     .detail { padding: 18px; min-width: 0; }
+    .actions { display: flex; justify-content: space-between; gap: 14px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding: 14px 0; }
+    .filters, .downloads { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    label { display: flex; gap: 6px; align-items: center; color: var(--muted); }
+    select, button, .downloads a, .filters a { border: 1px solid var(--line); background: #11151a; color: var(--text); padding: 7px 9px; text-decoration: none; font: inherit; }
+    button { cursor: pointer; }
+    .downloads a { color: var(--accent); }
     .panes { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 18px; }
     .panes section { padding: 16px; overflow: auto; }
     pre { margin: 0; white-space: pre-wrap; word-break: break-word; color: #d8e3f0; font: 13px/1.55 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

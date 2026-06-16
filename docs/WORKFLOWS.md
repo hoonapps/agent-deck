@@ -113,6 +113,9 @@ agent-deck findings .agent-deck/sessions/session.md --out findings.md
 agent-deck web --port 4545
 ```
 
+Use the dashboard filters to narrow findings by severity or agent, then download
+the filtered findings table or a blog draft from the selected session.
+
 - Generate a first blog draft when the session is worth publishing:
 
 ```bash

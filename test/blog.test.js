@@ -40,7 +40,7 @@ test("parseTranscriptEntries extracts transcript records", () => {
 test("buildBlogDraftFromTranscript creates a Korean draft skeleton", () => {
   const draft = buildBlogDraftFromTranscript(sampleTranscript, { title: "작업 기록" });
   assert.match(draft, /title: "작업 기록"/);
-  assert.match(draft, /사용자 요청: 1개/);
+  assert.match(draft, /내가 보낸 요청: 1개/);
   assert.match(draft, /Agent 응답: 1개/);
   assert.match(draft, /테스트\/검증 이벤트: 1개/);
 });

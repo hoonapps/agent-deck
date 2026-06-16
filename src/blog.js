@@ -22,7 +22,7 @@ export function buildBlogDraftFromTranscript(markdown, { title, sourcePath } = {
     "",
     "## 요약",
     "",
-    `- 사용자 요청: ${prompts.length}개`,
+    `- 내가 보낸 요청: ${prompts.length}개`,
     `- Agent 응답: ${outputs.length}개`,
     `- 테스트/검증 이벤트: ${tests.length}개`,
     "",
