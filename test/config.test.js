@@ -44,10 +44,10 @@ test("parseComposerCommand supports utility commands", () => {
     target: "all"
   });
   assert.deepEqual(parseComposerCommand("/models"), { type: "models" });
-  assert.deepEqual(parseComposerCommand("/set-model codex gpt-5.3-codex"), {
+  assert.deepEqual(parseComposerCommand("/set-model codex gpt-5-codex"), {
     type: "set-model",
     target: "codex",
-    model: "gpt-5.3-codex"
+    model: "gpt-5-codex"
   });
 });
 
@@ -78,19 +78,19 @@ test("normalizeAgent appends model args without removing resume args", () => {
     ["--resume", "--model", "sonnet"]
   );
   assert.deepEqual(
-    normalizeAgent({ id: "codex", command: "codex", model: "gpt-5.3-codex", args: ["resume", "--last"] }, "/tmp/work", 0).args,
-    ["resume", "--last", "--model", "gpt-5.3-codex"]
+    normalizeAgent({ id: "codex", command: "codex", model: "gpt-5-codex", args: ["resume", "--last"] }, "/tmp/work", 0).args,
+    ["resume", "--last", "--model", "gpt-5-codex"]
   );
 });
 
 test("normalizeAgent inserts codex model before stdin prompt marker", () => {
-  assert.deepEqual(normalizeAgent({ id: "codex", command: "codex", model: "gpt-5.3-codex" }, "/tmp/work", 0).args, [
+  assert.deepEqual(normalizeAgent({ id: "codex", command: "codex", model: "gpt-5-codex" }, "/tmp/work", 0).args, [
     "exec",
     "--color",
     "never",
     "--skip-git-repo-check",
     "--model",
-    "gpt-5.3-codex",
+    "gpt-5-codex",
     "-"
   ]);
 });
@@ -146,8 +146,8 @@ test("loadConfig normalizes numeric config and rejects invalid history sizes", (
 });
 
 test("parseModelOverrides maps agent ids to models", () => {
-  assert.deepEqual(parseModelOverrides(["codex=gpt-5.3-codex,claude=sonnet"]), {
-    codex: "gpt-5.3-codex",
+  assert.deepEqual(parseModelOverrides(["codex=gpt-5-codex,claude=sonnet"]), {
+    codex: "gpt-5-codex",
     claude: "sonnet"
   });
 });
@@ -216,9 +216,9 @@ test("loadConfig normalizes review agents and role presets", () => {
 
 test("runtimeSetAgentModel updates model args from base args", () => {
   const agent = normalizeAgent({ id: "codex", command: "codex", args: ["resume", "--last"] }, "/tmp/work", 0);
-  runtimeSetAgentModel(agent, "gpt-5.3-codex");
-  assert.equal(agent.label, "codex [gpt-5.3-codex]");
-  assert.deepEqual(agent.args, ["resume", "--last", "--model", "gpt-5.3-codex"]);
+  runtimeSetAgentModel(agent, "gpt-5-codex");
+  assert.equal(agent.label, "codex [gpt-5-codex]");
+  assert.deepEqual(agent.args, ["resume", "--last", "--model", "gpt-5-codex"]);
 });
 
 test("shellCommand preserves arguments with spaces and quotes", () => {

@@ -58,11 +58,17 @@ Use a custom session name:
 agent-deck --session login-refactor
 ```
 
-Most users should save model defaults in `agent-deck.config.json` with `agent-deck init`. For one-off overrides, use either the generic flag or the short flags:
+Most users should leave the provider default model at first. To choose models before the terminal cockpit opens, use:
 
 ```bash
-agent-deck --model codex=gpt-5.3-codex --model claude=sonnet
-agent-deck --codex-model gpt-5.3-codex --claude-model sonnet
+agent-deck --select-models
+```
+
+For one-off overrides, use a model name your local provider account supports:
+
+```bash
+agent-deck --model codex=gpt-5-codex --model claude=sonnet
+agent-deck --codex-model gpt-5-codex --claude-model sonnet
 ```
 
 Create a repo-local config:
@@ -75,6 +81,18 @@ Check whether the configured agent CLIs are available:
 
 ```bash
 agent-deck doctor
+```
+
+When you open the TUI, Agent Deck runs a short preflight first. It checks
+whether `codex` and `claude` are installed and logged in. Existing logins are
+skipped; missing logins are shown with the exact login command and, in an
+interactive terminal, a prompt to start login before the cockpit opens.
+
+Run the same preflight without opening the TUI:
+
+```bash
+agent-deck setup
+agent-deck setup --select-models
 ```
 
 Validate config without opening the TUI:
@@ -195,7 +213,6 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
       "command": "codex",
       "mode": "turn",
       "role": "implementer",
-      "model": "gpt-5.3-codex",
       "args": []
     },
     {
@@ -205,7 +222,6 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
       "command": "claude",
       "mode": "turn",
       "role": "reviewer",
-      "model": "sonnet",
       "args": []
     }
   ]
@@ -225,7 +241,7 @@ CLI flag > config model > AGENT_DECK_<AGENT>_MODEL > provider default
 Useful environment variables:
 
 ```bash
-export AGENT_DECK_CODEX_MODEL=gpt-5.3-codex
+export AGENT_DECK_CODEX_MODEL=gpt-5-codex
 export AGENT_DECK_CLAUDE_MODEL=sonnet
 ```
 
@@ -233,7 +249,7 @@ Change a running agent from inside the TUI:
 
 ```text
 /models
-/set-model codex gpt-5.3-codex
+/set-model codex gpt-5-codex
 /set-model claude sonnet
 ```
 
@@ -251,8 +267,7 @@ To use raw interactive CLI behavior, set `mode: "interactive"` and keep the nati
   "id": "codex",
   "command": "codex",
   "mode": "interactive",
-  "args": ["resume", "--last"],
-  "model": "gpt-5.3-codex"
+  "args": ["resume", "--last"]
 }
 ```
 

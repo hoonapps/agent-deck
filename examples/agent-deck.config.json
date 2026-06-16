@@ -13,7 +13,6 @@
       "command": "codex",
       "mode": "turn",
       "role": "implementer",
-      "model": "gpt-5.3-codex",
       "args": []
     },
     {
@@ -23,7 +22,6 @@
       "command": "claude",
       "mode": "turn",
       "role": "reviewer",
-      "model": "sonnet",
       "args": []
     }
   ]

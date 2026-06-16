@@ -6,6 +6,7 @@ import process from "node:process";
 import { createApp } from "../src/app.js";
 import { writeBlogDraft } from "../src/blog.js";
 import { findExecutable, loadConfig, parseModelOverrides } from "../src/config.js";
+import { runPreflight } from "../src/preflight.js";
 import { buildReplayFromFile, formatSessionList, listTranscriptFiles, writeFindingsReport } from "../src/transcript-tools.js";
 import { startDashboard } from "../src/web.js";
 
@@ -18,8 +19,10 @@ Local TUI workspace for coordinating Codex, Claude, shell, git, and tests.
 
 Usage:
   agent-deck [--config agent-deck.config.json] [--session name]
-             [--model codex=gpt-5.3-codex] [--codex-model gpt-5.3-codex] [--claude-model sonnet]
+             [--model codex=gpt-5-codex] [--codex-model gpt-5-codex] [--claude-model sonnet]
+             [--select-models] [--skip-preflight]
   agent-deck doctor
+  agent-deck setup [--select-models]
   agent-deck validate
   agent-deck sessions [--dir .agent-deck/sessions]
   agent-deck replay <transcript.md> [--limit 40]
@@ -119,7 +122,6 @@ function initConfig() {
             command: "codex",
             mode: "turn",
             role: "implementer",
-            model: "gpt-5.3-codex",
             args: []
           },
           {
@@ -129,7 +131,6 @@ function initConfig() {
             command: "claude",
             mode: "turn",
             role: "reviewer",
-            model: "sonnet",
             args: []
           }
         ]
@@ -145,6 +146,8 @@ if (args.includes("-h") || args.includes("--help")) {
   printHelp();
 } else if (args[0] === "doctor") {
   await doctor();
+} else if (args[0] === "setup") {
+  await setup();
 } else if (args[0] === "validate") {
   validateConfig();
 } else if (args[0] === "sessions") {
@@ -166,6 +169,13 @@ if (args.includes("-h") || args.includes("--help")) {
     modelOverrides: cliModelOverrides(),
     cwd: process.cwd()
   });
+  if (!args.includes("--skip-preflight")) {
+    await runPreflight({
+      config,
+      selectModels: args.includes("--select-models"),
+      loginMissing: true
+    });
+  }
   createApp(config).start();
 }
 
@@ -187,6 +197,21 @@ function validateConfig() {
   console.log(`✓ config ok: ${config.configPath || "(defaults)"}`);
   console.log(`Workspace: ${config.workspace}`);
   console.log(`Agents: ${config.agents.map((agent) => agent.id).join(", ")}`);
+}
+
+async function setup() {
+  const config = loadConfig({
+    configPath: valueAfter("--config"),
+    sessionName: valueAfter("--session"),
+    modelOverrides: cliModelOverrides(),
+    cwd: process.cwd()
+  });
+  await runPreflight({
+    config,
+    selectModels: args.includes("--select-models"),
+    loginMissing: true
+  });
+  console.log("Setup check complete. Run agent-deck to open the terminal cockpit.");
 }
 
 function listSessions() {

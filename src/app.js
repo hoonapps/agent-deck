@@ -42,7 +42,15 @@ const HELP_TEXT = `Commands:
 /set-model <agent> <model>
                         set an agent model and restart it
 /exit-chat              leave the current agent chat
+/help                   show this command list
 /quit                   exit`;
+
+const STARTUP_HINTS = [
+  "Start with /co, /cl, or /to <agent> <message>.",
+  "Use /review <message> to ask configured reviewers for findings.",
+  "Use /test, /git, and /status without leaving the cockpit.",
+  "Plain text is sent only after you enter an agent chat."
+];
 
 export function createApp(config) {
   return new AgentDeckApp(config);
@@ -78,7 +86,7 @@ class AgentDeckApp {
     this.startAgents();
     this.refreshHistory();
     this.log(`Session transcript: ${this.transcript.path}`);
-    this.log("Use /co or /cl to enter an agent chat. Clean mode shows only your message and the answer.");
+    this.log(formatStartupGuide(this.config.agents));
     this.input.focus();
     this.render();
   }
@@ -604,7 +612,7 @@ class AgentDeckApp {
 
   updateHeader() {
     const agent = this.activeAgent();
-    const routes = this.config.agents.map((item) => `/${item.aliases[0] || item.id}`).join(" ");
+    const routes = formatAgentRouteHints(this.config.agents);
     const statuses = this.config.agents
       .map((item) => {
         const state = this.agentStatus(item.id).state;
@@ -614,19 +622,19 @@ class AgentDeckApp {
     const active = agent ? `${agent.id}${agent.model ? `:${agent.model}` : ""}` : "none";
     const recording = this.transcript.recording ? "{green-fg}record:on{/green-fg}" : "{yellow-fg}record:paused{/yellow-fg}";
     this.header.setContent(
-      ` {bold}${this.config.title}{/bold}  {gray-fg}|{/gray-fg} active:{cyan-fg}${active}{/cyan-fg}  {gray-fg}|{/gray-fg} ${recording}\n` +
-        ` ${statuses}  {gray-fg}| routes ${routes} | F10 test | Ctrl+C quit{/gray-fg}`
+      ` {bold}${this.config.title}{/bold}  {gray-fg}|{/gray-fg} active:{cyan-fg}${active}{/cyan-fg}  {gray-fg}|{/gray-fg} ${recording}  {gray-fg}|{/gray-fg} ${formatAgentSummary(this.config.agents)}\n` +
+        ` ${statuses}  {gray-fg}| routes ${routes} | F10 test | F8 history | Ctrl+C quit{/gray-fg}`
     );
   }
 
   updateStatusBar() {
     const parts = [
-      "{cyan-fg}/co{/cyan-fg} {magenta-fg}/cl{/magenta-fg} /to",
-      "{yellow-fg}/review{/yellow-fg} {green-fg}/test{/green-fg} /status",
-      "{blue-fg}/export{/blue-fg} /findings /timeout",
-      "{gray-fg}/record{/gray-fg} /redact",
-      "{white-fg}F8 history{/white-fg}",
-      "{red-fg}Ctrl+C quit{/red-fg}"
+      `{cyan-fg}chat{/cyan-fg} ${formatAgentRouteHints(this.config.agents)} /all`,
+      "{yellow-fg}review{/yellow-fg} /review /findings",
+      "{green-fg}run{/green-fg} /test /git /status",
+      "{blue-fg}ship{/blue-fg} /export /record",
+      "{white-fg}keys{/white-fg} F8 history F10 test Ctrl+X stop",
+      "{red-fg}quit{/red-fg} Ctrl+C"
     ];
     this.statusBar?.setContent(` ${parts.join("  {gray-fg}|{/gray-fg}  ")} `);
   }
@@ -725,11 +733,31 @@ export function formatStatusBadge(state = "unknown") {
 
 export function formatPaneTitle(agent, status = {}, active = false) {
   const marker = active ? ">" : " ";
-  return ` ${marker} ${agent.label} | ${formatStatusBadge(status.state)} `;
+  const role = agent.role ? ` | ${agent.role}` : "";
+  return ` ${marker} ${agent.label}${role} | ${formatStatusBadge(status.state)} `;
 }
 
 export function formatLogLine(message, now = new Date()) {
   return `${now.toLocaleTimeString()} | ${message}`;
+}
+
+export function formatAgentRouteHints(agents = []) {
+  return agents.map((agent) => `/${agent.aliases?.[0] || agent.id}`).join(" ");
+}
+
+export function formatAgentSummary(agents = []) {
+  const reviewers = agents.filter((agent) => agent.role === "reviewer").length;
+  const modelPins = agents.filter((agent) => agent.model).length;
+  return `${agents.length} agents, ${reviewers} reviewers, ${modelPins} model pins`;
+}
+
+export function formatStartupGuide(agents = []) {
+  return [
+    "Terminal cockpit ready.",
+    `Agents: ${agents.map((agent) => `${agent.id}${agent.role ? `/${agent.role}` : ""}`).join(", ") || "none"}`,
+    `Routes: ${formatAgentRouteHints(agents) || "(none)"}`,
+    ...STARTUP_HINTS
+  ].join("\n");
 }
 
 export function panePosition(index, count) {

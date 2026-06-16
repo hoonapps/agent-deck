@@ -68,6 +68,18 @@ This is useful for checking terminal compatibility before configuring real
 agents. It also lets you check the status-colored panes and command hint bar
 without installing provider CLIs.
 
+For real Codex and Claude sessions, run preflight first or let the normal launch
+do it:
+
+```bash
+agent-deck setup --select-models
+agent-deck --select-models
+```
+
+If both providers are already logged in, preflight only prints the status and
+continues. If one is missing, it offers to run `codex login` or
+`claude auth login` before the TUI starts.
+
 ## 5. Session Hygiene
 
 Before a real session:

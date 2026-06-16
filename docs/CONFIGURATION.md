@@ -60,6 +60,17 @@ surprising collisions such as `echo-a` and `echo-b` both deriving `ec`.
 
 ## Model Precedence
 
+Before the TUI opens, Agent Deck runs a provider preflight for configured
+Codex/Claude agents:
+
+- `codex login status` for Codex
+- `claude auth status` for Claude
+
+Already-authenticated providers are skipped. Missing providers print the login
+command and can be started interactively before the cockpit opens. Use
+`--skip-preflight` for scripted launches and `--select-models` when you want to
+choose models before the TUI starts.
+
 Model selection is resolved in this order:
 
 ```text
@@ -69,12 +80,13 @@ CLI flag > config model > AGENT_DECK_<AGENT>_MODEL > provider default
 Examples:
 
 ```bash
-agent-deck --model codex=gpt-5.3-codex,claude=sonnet
-agent-deck --codex-model gpt-5.3-codex --claude-model sonnet
+agent-deck --select-models
+agent-deck --model codex=gpt-5-codex,claude=sonnet
+agent-deck --codex-model gpt-5-codex --claude-model sonnet
 ```
 
 ```bash
-export AGENT_DECK_CODEX_MODEL=gpt-5.3-codex
+export AGENT_DECK_CODEX_MODEL=gpt-5-codex
 export AGENT_DECK_CLAUDE_MODEL=sonnet
 ```
 
@@ -82,7 +94,7 @@ Inside the TUI:
 
 ```text
 /models
-/set-model codex gpt-5.3-codex
+/set-model codex gpt-5-codex
 ```
 
 `/set-model` updates the current runtime config, restarts that agent, and updates
@@ -257,8 +269,7 @@ Use interactive mode when you explicitly want the provider's native terminal UI:
   "id": "codex",
   "command": "codex",
   "mode": "interactive",
-  "args": ["resume", "--last"],
-  "model": "gpt-5.3-codex"
+  "args": ["resume", "--last"]
 }
 ```
 
