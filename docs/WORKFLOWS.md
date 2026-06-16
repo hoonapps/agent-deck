@@ -126,6 +126,8 @@ Mark individual findings as `accepted`, `fixed`, or `ignored` as review items
 move through implementation.
 Use the Review Inbox at the top of the dashboard to keep open high-severity
 findings visible across sessions.
+Use Review Trends to spot repeated locations, noisy agents, and status buildup
+before opening individual sessions.
 
 - Generate a first blog draft when the session is worth publishing:
 

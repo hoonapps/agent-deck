@@ -34,6 +34,10 @@ async function handleDashboardRequest({ request, response, root, title }) {
     sendJson(response, reviewInbox(root));
     return;
   }
+  if (url.pathname === "/api/trends") {
+    sendJson(response, reviewTrends(root));
+    return;
+  }
   if (url.pathname === "/api/session-state" && request.method === "POST") {
     const payload = JSON.parse(await readRequestBody(request));
     sendJson(response, updateSessionStatus(root, payload.file, payload.status));
@@ -96,6 +100,7 @@ export function dashboardModel({ transcriptDir, selectedName, filters = {} } = {
     sessions,
     selected: selected ? sessionDetails(root, selected.name, filters) : null,
     inbox: reviewInbox(root),
+    trends: reviewTrends(root),
     filters: normalizeFilters(filters)
   };
 }
@@ -124,6 +129,7 @@ function renderDashboard({ title, root, selectedName, filters }) {
       </div>
     </header>
     ${renderInbox(model.inbox)}
+    ${renderTrends(model.trends)}
     <section class="layout">
       <aside class="sessions" aria-label="Sessions">
         <h2>Sessions</h2>
@@ -169,6 +175,50 @@ function renderInbox(inbox) {
         : "<p class=\"empty\">No open high-severity review findings.</p>"
     }
   </section>`;
+}
+
+function renderTrends(trends) {
+  const locationRows = trends.locations
+    .slice(0, 6)
+    .map(
+      (location) => `<tr>
+        <td>${escapeHtml(location.label)}</td>
+        <td>${location.count}</td>
+        <td>${location.high}</td>
+        <td>${location.open}</td>
+        <td>${location.sessions}</td>
+      </tr>`
+    )
+    .join("");
+  return `<section class="trends" aria-label="Review trends">
+    <div class="trend-header">
+      <div>
+        <p class="eyebrow">Review Trends</p>
+        <h2>${trends.total} findings across ${trends.sessions} sessions</h2>
+      </div>
+      <div class="trend-pills">
+        ${renderTrendPills("Severity", trends.severities)}
+        ${renderTrendPills("Status", trends.statuses)}
+        ${renderTrendPills("Agent", trends.agents)}
+      </div>
+    </div>
+    ${
+      trends.total
+        ? `<table>
+            <thead><tr><th>Location</th><th>Total</th><th>High</th><th>Open</th><th>Sessions</th></tr></thead>
+            <tbody>${locationRows}</tbody>
+          </table>`
+        : "<p class=\"empty\">No review trends yet.</p>"
+    }
+  </section>`;
+}
+
+function renderTrendPills(label, items) {
+  const pills = items
+    .slice(0, 4)
+    .map((item) => `<span><strong>${escapeHtml(item.label)}</strong> ${item.count}</span>`)
+    .join("");
+  return `<div class="trend-group"><em>${escapeHtml(label)}</em>${pills || "<span>-</span>"}</div>`;
 }
 
 function renderSessionLinks(sessions, selectedName, filters) {
@@ -347,15 +397,59 @@ function sessionDetails(root, requestedName, filters = {}) {
 
 function reviewInbox(root) {
   const sessions = sessionList(root);
-  const findings = sessions.flatMap((session) => {
-    const detail = sessionDetails(root, session.name, { severity: "high", status: "open" });
-    return detail ? detail.findings.map((finding) => ({ ...finding, sessionModifiedAt: session.modifiedAt })) : [];
-  });
+  const findings = allSessionFindings(root, sessions).filter((finding) => finding.severity === "high" && finding.status === "open");
   return {
     count: findings.length,
     sessions: sessions.length,
     findings: findings.sort((a, b) => b.sessionModifiedAt.localeCompare(a.sessionModifiedAt))
   };
+}
+
+function reviewTrends(root) {
+  const sessions = sessionList(root);
+  const findings = allSessionFindings(root, sessions);
+  return {
+    total: findings.length,
+    sessions: sessions.length,
+    locations: groupLocationTrends(findings),
+    agents: groupCountTrends(findings, (finding) => finding.agent || "unknown"),
+    severities: groupCountTrends(findings, (finding) => finding.severity || "unknown"),
+    statuses: groupCountTrends(findings, (finding) => finding.status || "open")
+  };
+}
+
+function allSessionFindings(root, sessions = sessionList(root)) {
+  return sessions.flatMap((session) => {
+    const detail = sessionDetails(root, session.name);
+    return detail ? detail.allFindings.map((finding) => ({ ...finding, sessionModifiedAt: session.modifiedAt })) : [];
+  });
+}
+
+function groupLocationTrends(findings) {
+  const grouped = new Map();
+  for (const finding of findings) {
+    const label = finding.location || "(no location)";
+    const current = grouped.get(label) || { label, count: 0, high: 0, open: 0, sessionNames: new Set() };
+    current.count += 1;
+    if (finding.severity === "high") current.high += 1;
+    if (finding.status === "open") current.open += 1;
+    current.sessionNames.add(finding.session);
+    grouped.set(label, current);
+  }
+  return [...grouped.values()]
+    .map(({ sessionNames, ...item }) => ({ ...item, sessions: sessionNames.size }))
+    .sort((a, b) => b.open - a.open || b.high - a.high || b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function groupCountTrends(findings, labelFor) {
+  const grouped = new Map();
+  for (const finding of findings) {
+    const label = labelFor(finding);
+    grouped.set(label, (grouped.get(label) || 0) + 1);
+  }
+  return [...grouped.entries()]
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }
 
 function publicSessionDetails(session) {
@@ -593,10 +687,14 @@ function dashboardCss() {
     h3 { margin-bottom: 12px; color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
     .meta, .stats { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; color: var(--muted); }
     .meta span, .stats span { border: 1px solid var(--line); background: var(--panel); padding: 6px 9px; }
-    .inbox { border: 1px solid var(--line); background: var(--panel); margin-top: 18px; padding: 16px; overflow: auto; }
-    .inbox-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin-bottom: 12px; }
-    .inbox-header span { color: var(--muted); border: 1px solid var(--line); padding: 6px 9px; }
+    .inbox, .trends { border: 1px solid var(--line); background: var(--panel); margin-top: 18px; padding: 16px; overflow: auto; }
+    .inbox-header, .trend-header { display: flex; justify-content: space-between; gap: 20px; align-items: flex-end; margin-bottom: 12px; }
+    .inbox-header span, .trend-pills span { color: var(--muted); border: 1px solid var(--line); padding: 6px 9px; }
     .inbox a { color: var(--accent); text-decoration: none; font-weight: 700; }
+    .trend-pills { display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap; justify-content: flex-end; }
+    .trend-group { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+    .trend-group em { color: var(--muted); font-style: normal; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; }
+    .trend-pills strong { color: var(--text); }
     .layout { display: grid; grid-template-columns: minmax(240px, 340px) 1fr; gap: 18px; margin-top: 18px; min-height: calc(100vh - 120px); }
     .sessions, .detail, .panes section { border: 1px solid var(--line); background: var(--panel); }
     .sessions { padding: 16px; overflow: auto; }

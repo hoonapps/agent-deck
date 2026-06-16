@@ -29,13 +29,47 @@ blocking issue 찾아줘
 \`\`\`
 `;
 
+const secondTranscript = `# Agent Deck Session
+
+- Started: 2026-06-16T00:10:00.000Z
+- Workspace: /tmp/work
+
+## 2026-06-16T00:11:00.000Z input -> review -> codex
+
+\`\`\`text
+다시 리뷰해줘
+\`\`\`
+
+## 2026-06-16T00:12:00.000Z output <- codex
+
+\`\`\`text
+AGENT_DECK_FINDINGS_JSON
+[
+  {
+    "severity": "high",
+    "location": "src/app.js:12",
+    "summary": "실패 상태 누락이 다른 경로에서도 반복됨",
+    "evidence": "error branch"
+  },
+  {
+    "severity": "low",
+    "location": "docs/README.md:8",
+    "summary": "문서 예제가 오래됨",
+    "evidence": "old command"
+  }
+]
+END_AGENT_DECK_FINDINGS_JSON
+\`\`\`
+`;
+
 test("dashboardModel summarizes sessions, replay, and findings", () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
   writeFileSync(join(dir, "review.md"), sampleTranscript);
+  writeFileSync(join(dir, "follow-up.md"), secondTranscript);
 
   const model = dashboardModel({ transcriptDir: dir, selectedName: "review.md" });
 
-  assert.equal(model.sessions.length, 1);
+  assert.equal(model.sessions.length, 2);
   assert.equal(model.selected.name, "review.md");
   assert.equal(model.selected.counts.inputs, 1);
   assert.equal(model.selected.counts.outputs, 2);
@@ -44,8 +78,14 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.selected.status, "draft");
   assert.equal(model.selected.findings[0].status, "open");
   assert.match(model.selected.findings[0].key, /^[a-f0-9]{12}$/);
-  assert.equal(model.inbox.count, 1);
-  assert.equal(model.inbox.findings[0].session, "review.md");
+  assert.equal(model.inbox.count, 2);
+  assert.equal(model.inbox.findings[0].status, "open");
+  assert.equal(model.trends.total, 4);
+  assert.equal(model.trends.locations[0].label, "src/app.js:12");
+  assert.equal(model.trends.locations[0].count, 2);
+  assert.equal(model.trends.locations[0].high, 2);
+  assert.equal(model.trends.locations[0].sessions, 2);
+  assert.equal(model.trends.severities.find((item) => item.label === "high")?.count, 2);
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
@@ -56,6 +96,7 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
 test("startDashboard serves HTML and JSON APIs", async () => {
   const dir = mkdtempSync(join(tmpdir(), "agent-deck-web-"));
   writeFileSync(join(dir, "review.md"), sampleTranscript);
+  writeFileSync(join(dir, "follow-up.md"), secondTranscript);
 
   const { server, url } = await startDashboard({ transcriptDir: dir, title: "Agent Deck Web", port: 0 });
   try {
@@ -66,11 +107,13 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /class="status draft"/);
     assert.match(html, /class="finding-status open active"/);
     assert.match(html, /Review Inbox/);
-    assert.match(html, /1 open high findings/);
+    assert.match(html, /2 open high findings/);
+    assert.match(html, /Review Trends/);
+    assert.match(html, /4 findings across 2 sessions/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
-    assert.equal(sessions[0].name, "review.md");
-    assert.equal(sessions[0].status, "draft");
+    assert.equal(sessions.length, 2);
+    assert.equal(sessions.find((session) => session.name === "review.md")?.status, "draft");
 
     const session = await fetchJson(new URL("/api/session?file=..%2Freview.md", url));
     assert.equal(session.name, "review.md");
@@ -82,10 +125,16 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.equal("path" in session, false);
 
     const inbox = await fetchJson(new URL("/api/inbox", url));
-    assert.equal(inbox.count, 1);
-    assert.equal(inbox.findings[0].session, "review.md");
+    assert.equal(inbox.count, 2);
     assert.equal(inbox.findings[0].severity, "high");
     assert.equal(inbox.findings[0].status, "open");
+
+    const trends = await fetchJson(new URL("/api/trends", url));
+    assert.equal(trends.total, 4);
+    assert.equal(trends.locations[0].label, "src/app.js:12");
+    assert.equal(trends.locations[0].open, 2);
+    assert.equal(trends.locations[0].sessions, 2);
+    assert.equal(trends.agents.find((item) => item.label === "codex")?.count, 3);
 
     const filtered = await fetchJson(new URL("/api/session?file=review.md&severity=medium&agent=codex", url));
     assert.equal(filtered.findings.length, 1);
