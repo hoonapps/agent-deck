@@ -47,7 +47,7 @@ const HELP_TEXT = `Commands:
 
 const STARTUP_HINTS = [
   "Start with /co, /cl, or /to <agent> <message>.",
-  "Use /review <message> to ask configured reviewers for findings.",
+  "Use /review <message> to ask review agents for findings.",
   "Use /test, /git, and /status without leaving the cockpit.",
   "Plain text is sent only after you enter an agent chat."
 ];
@@ -80,6 +80,7 @@ class AgentDeckApp {
     });
     this.screen.program.alternateBuffer();
     this.screen.program.hideCursor();
+    this.screen.program.disableMouse();
 
     this.createLayout();
     this.bindKeys();
@@ -128,7 +129,6 @@ class AgentDeckApp {
         tags: false,
         keys: true,
         vi: true,
-        mouse: true,
         scrollbar: { ch: " ", track: { bg: "black" }, style: { bg: "cyan" } },
         style: {
           fg: THEME.text,
@@ -153,7 +153,6 @@ class AgentDeckApp {
       scrollable: true,
       alwaysScroll: true,
       tags: true,
-      mouse: true,
       style: {
         fg: THEME.text,
         bg: THEME.panelBg,
@@ -173,7 +172,6 @@ class AgentDeckApp {
       scrollable: true,
       alwaysScroll: true,
       tags: false,
-      mouse: true,
       style: {
         fg: THEME.text,
         bg: THEME.panelBg,
@@ -202,7 +200,6 @@ class AgentDeckApp {
       border: "line",
       inputOnFocus: true,
       keys: true,
-      mouse: true,
       style: {
         fg: THEME.text,
         bg: THEME.bg,
@@ -709,6 +706,7 @@ class AgentDeckApp {
 
   shutdown() {
     for (const process of this.agents.values()) process.stop();
+    this.screen.program.disableMouse();
     this.screen.program.showCursor();
     this.screen.program.normalBuffer();
     this.screen.destroy();
@@ -733,8 +731,7 @@ export function formatStatusBadge(state = "unknown") {
 
 export function formatPaneTitle(agent, status = {}, active = false) {
   const marker = active ? ">" : " ";
-  const role = agent.role ? ` | ${agent.role}` : "";
-  return ` ${marker} ${agent.label}${role} | ${formatStatusBadge(status.state)} `;
+  return ` ${marker} ${agent.label} | ${formatStatusBadge(status.state)} `;
 }
 
 export function formatLogLine(message, now = new Date()) {
@@ -746,15 +743,14 @@ export function formatAgentRouteHints(agents = []) {
 }
 
 export function formatAgentSummary(agents = []) {
-  const reviewers = agents.filter((agent) => agent.role === "reviewer").length;
   const modelPins = agents.filter((agent) => agent.model).length;
-  return `${agents.length} agents, ${reviewers} reviewers, ${modelPins} model pins`;
+  return `${agents.length} agents, ${modelPins} model pins`;
 }
 
 export function formatStartupGuide(agents = []) {
   return [
     "Terminal cockpit ready.",
-    `Agents: ${agents.map((agent) => `${agent.id}${agent.role ? `/${agent.role}` : ""}`).join(", ") || "none"}`,
+    `Agents: ${agents.map((agent) => agent.id).join(", ") || "none"}`,
     `Routes: ${formatAgentRouteHints(agents) || "(none)"}`,
     ...STARTUP_HINTS
   ].join("\n");

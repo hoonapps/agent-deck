@@ -157,7 +157,7 @@ export class AgentProcess extends EventEmitter {
       this.lastDurationMs = Date.now() - startedAt;
       this.lastExitCode = code;
       this.lastSignal = signal;
-      const output = cleanTurnOutput(stdout || stderr);
+      const output = code === 0 ? cleanTurnOutput(stdout || stderr) : formatTurnFailureOutput({ stdout, stderr, agent: this.agent });
       if (output) this.emit("data", output);
       if (timedOut) {
         this.setState("timeout");
@@ -211,6 +211,58 @@ export function cleanTurnOutput(data) {
     .filter((line) => !isNoiseLine(line))
     .join("\n")
     .trim();
+}
+
+export function formatTurnFailureOutput({ stdout = "", stderr = "", agent = {} } = {}) {
+  const raw = cleanTerminalOutput(`${stderr || ""}\n${stdout || ""}`).trim();
+  const provider = providerName(agent);
+  const model = unsupportedModel(raw);
+  if (model) {
+    return [
+      `[agent-deck] ${provider} model is not available: ${model}`,
+      "Choose another model with /set-model or restart with --select-models.",
+      `Current agent: ${agent.id || agent.name || "unknown"}`
+    ].join("\n");
+  }
+
+  if (authRequired(raw)) {
+    return [
+      `[agent-deck] ${provider} login is required.`,
+      `Run ${loginCommand(agent)} before starting this agent, or restart Agent Deck and accept the preflight login prompt.`
+    ].join("\n");
+  }
+
+  const concise = cleanTurnOutput(raw)
+    .split("\n")
+    .filter(Boolean)
+    .slice(0, 8)
+    .join("\n");
+  return concise || `[agent-deck] ${provider} exited without a usable response. Check /status and the provider CLI.`;
+}
+
+function providerName(agent = {}) {
+  const value = `${agent.id || ""} ${agent.command || ""}`.toLowerCase();
+  if (value.includes("codex")) return "Codex";
+  if (value.includes("claude")) return "Claude";
+  return agent.name || agent.id || "Agent";
+}
+
+function loginCommand(agent = {}) {
+  const value = `${agent.id || ""} ${agent.command || ""}`.toLowerCase();
+  if (value.includes("codex")) return `${agent.command || "codex"} login`;
+  if (value.includes("claude")) return `${agent.command || "claude"} auth login`;
+  return `${agent.command || "provider-cli"} login`;
+}
+
+function unsupportedModel(output) {
+  const quoted = output.match(/["'`]([^"'`]+)["'`]\s+model is not supported/i);
+  if (quoted) return quoted[1];
+  const plain = output.match(/\bmodel\s+([A-Za-z0-9_.:-]+)\s+is not supported/i);
+  return plain ? plain[1] : "";
+}
+
+function authRequired(output) {
+  return /not\s+logged\s+in|login\s+required|authentication\s+required|unauthenticated|invalid\s+api\s+key/i.test(output);
 }
 
 function extractCodexAnswer(data) {

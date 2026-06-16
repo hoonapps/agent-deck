@@ -25,7 +25,7 @@ test("terminal formatting helpers produce compact labels", () => {
   assert.equal(formatStatusBadge("unknown-state"), "UNKNOWN");
   assert.equal(
     formatPaneTitle({ label: "Codex [gpt-5-codex]", role: "implementer" }, { state: "idle" }, true),
-    " > Codex [gpt-5-codex] | implementer | IDLE "
+    " > Codex [gpt-5-codex] | IDLE "
   );
   assert.equal(formatLogLine("Started", new Date("2026-06-16T12:00:00Z")).endsWith(" | Started"), true);
 });
@@ -37,7 +37,8 @@ test("terminal startup helpers summarize routes and setup state", () => {
   ];
 
   assert.equal(formatAgentRouteHints(agents), "/co /cl");
-  assert.equal(formatAgentSummary(agents), "2 agents, 1 reviewers, 1 model pins");
+  assert.equal(formatAgentSummary(agents), "2 agents, 1 model pins");
   assert.match(formatStartupGuide(agents), /Terminal cockpit ready/);
+  assert.doesNotMatch(formatStartupGuide(agents), /implementer|reviewer/);
   assert.match(formatStartupGuide(agents), /Routes: \/co \/cl/);
 });

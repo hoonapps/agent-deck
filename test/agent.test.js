@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { AgentProcess } from "../src/agent.js";
+import { AgentProcess, formatTurnFailureOutput } from "../src/agent.js";
 
 test("AgentProcess records successful turn status", async () => {
   const agent = new AgentProcess({
@@ -60,4 +60,25 @@ test("AgentProcess stop updates turn-mode status immediately", () => {
   agent.stop();
 
   assert.equal(agent.status().state, "stopped");
+});
+
+test("formatTurnFailureOutput summarizes unsupported model failures", () => {
+  const output = formatTurnFailureOutput({
+    stderr: `ERROR: {"type":"error","message":"The 'gpt-5-codex-old' model is not supported when using Codex."}`,
+    agent: { id: "codex", command: "codex" }
+  });
+
+  assert.match(output, /Codex model is not available: gpt-5-codex-old/);
+  assert.match(output, /--select-models/);
+  assert.doesNotMatch(output, /invalid_request_error|ERROR:/);
+});
+
+test("formatTurnFailureOutput summarizes auth failures", () => {
+  const output = formatTurnFailureOutput({
+    stderr: "Authentication required. Not logged in.",
+    agent: { id: "claude", command: "claude" }
+  });
+
+  assert.match(output, /Claude login is required/);
+  assert.match(output, /claude auth login/);
 });
