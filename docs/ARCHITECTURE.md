@@ -126,6 +126,8 @@ same normalized query filters as session detail, so the trend panel and the
 selected session stay in the same review context. Time windows are applied to
 the session list before finding filters, which keeps `scannedSessions`,
 `windowSessions`, and filtered session counts distinct.
+Trend exports call the same derived read model and format it as Markdown; no
+snapshot files are written automatically.
 
 ## Safety Boundaries
 

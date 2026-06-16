@@ -65,6 +65,10 @@ async function handleDashboardRequest({ request, response, root, title }) {
     sendMarkdown(response, `${session?.name || "session"}-findings.md`, session ? formatFindingsMarkdown(session.findings, { sourcePath: session.path }) : "");
     return;
   }
+  if (url.pathname === "/export/trends") {
+    sendMarkdown(response, "agent-deck-review-trends.md", formatTrendMarkdown(reviewTrends(root, filtersFromParams(url.searchParams))));
+    return;
+  }
   if (url.pathname === "/export/blog") {
     const session = sessionDetails(root, url.searchParams.get("file"));
     sendMarkdown(response, `${session?.name || "session"}-blog-draft.md`, session ? buildBlogDraftFromTranscript(session.markdown, { title: titleFromSession(session.name), sourcePath: session.path }) : "");
@@ -239,6 +243,7 @@ function renderTrendFilters(trends, selectedName) {
     </label>
     <button type="submit">Apply trend</button>
     <a href="/?${queryString({ session: selectedName })}">Reset trend</a>
+    <a href="/export/trends?${queryString(trends.filters)}">Download trend</a>
   </form>`;
 }
 
@@ -530,6 +535,63 @@ function groupCountTrends(findings, labelFor) {
   return [...grouped.entries()]
     .map(([label, count]) => ({ label, count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function formatTrendMarkdown(trends) {
+  return [
+    "# Agent Deck Review Trends",
+    "",
+    `- Generated: ${new Date().toISOString()}`,
+    `- Findings: ${trends.total}`,
+    `- Sessions with findings: ${trends.sessions}`,
+    `- Window sessions: ${trends.windowSessions}`,
+    `- Scanned sessions: ${trends.scannedSessions}`,
+    `- Filters: ${formatTrendFilters(trends.filters)}`,
+    "",
+    "## Locations",
+    "",
+    "| Location | Total | High | Open | Sessions |",
+    "| --- | ---: | ---: | ---: | ---: |",
+    ...trendLocationRows(trends.locations),
+    "",
+    "## Severity",
+    "",
+    ...trendCountList(trends.severities),
+    "",
+    "## Status",
+    "",
+    ...trendCountList(trends.statuses),
+    "",
+    "## Agents",
+    "",
+    ...trendCountList(trends.agents),
+    ""
+  ].join("\n");
+}
+
+function trendLocationRows(locations) {
+  if (locations.length === 0) return ["| - | 0 | 0 | 0 | 0 |"];
+  return locations.map((location) =>
+    `| ${escapeMarkdownTable(location.label)} | ${location.count} | ${location.high} | ${location.open} | ${location.sessions} |`
+  );
+}
+
+function trendCountList(items) {
+  if (items.length === 0) return ["- none"];
+  return items.map((item) => `- ${item.label}: ${item.count}`);
+}
+
+function formatTrendFilters(filters) {
+  return [
+    `window=${filters.window}`,
+    `severity=${filters.severity}`,
+    `agent=${filters.agent}`,
+    `status=${filters.status}`
+  ].join(", ");
+}
+
+function escapeMarkdownTable(value) {
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
 function publicSessionDetails(session) {

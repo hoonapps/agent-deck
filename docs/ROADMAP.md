@@ -26,7 +26,7 @@ This roadmap keeps the direction practical.
 - Session replay mode for reading a transcript inside the TUI, beyond CLI replay.
 - Lightweight handoff summaries between agents.
 - Blog draft refinement for publish-ready Chirpy posts with screenshots.
-- Trend export snapshots for standups and changelog notes.
+- Trend comparison between current and previous review windows.
 
 ## Packaging
 

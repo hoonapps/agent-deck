@@ -128,6 +128,7 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /4 findings across 2 sessions/);
     assert.match(html, /Apply trend/);
     assert.match(html, /Reset trend/);
+    assert.match(html, /Download trend/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
     assert.equal(sessions.length, 2);
@@ -182,6 +183,14 @@ test("startDashboard serves HTML and JSON APIs", async () => {
 
     const windowHtml = await fetchText(new URL("/?session=review.md&window=recent:5", url));
     assert.match(windowHtml, /<option value="recent:5" selected>recent:5<\/option>/);
+
+    const trendExport = await fetchText(new URL("/export/trends?window=recent:1", url));
+    assert.match(trendExport, /Agent Deck Review Trends/);
+    assert.match(trendExport, /- Findings: 2/);
+    assert.match(trendExport, /- Window sessions: 1/);
+    assert.match(trendExport, /window=recent:1/);
+    assert.match(trendExport, /\| src\/app\.js:12 \| 1 \| 1 \| 1 \| 1 \|/);
+    assert.doesNotMatch(trendExport, /test\/web\.test\.js/);
 
     const filtered = await fetchJson(new URL("/api/session?file=review.md&severity=medium&agent=codex", url));
     assert.equal(filtered.findings.length, 1);

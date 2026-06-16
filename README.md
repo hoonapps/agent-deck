@@ -115,7 +115,7 @@ The dashboard supports `draft`, `published`, and `deferred` session markers,
 finding markers (`open`, `accepted`, `fixed`, `ignored`), severity/agent/status
 filters for session detail and trend views, time windows for trend summaries,
 an open high-severity review inbox, cross-session review trends, and download
-links for findings Markdown and Korean blog drafts.
+links for findings Markdown, trend snapshots, and Korean blog drafts.
 
 Create a blog draft from an existing transcript:
 
