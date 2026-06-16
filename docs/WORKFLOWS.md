@@ -80,7 +80,41 @@ If both providers are already logged in, preflight only prints the status and
 continues. If one is missing, it offers to run `codex login` or
 `claude auth login` before the TUI starts.
 
-## 5. Session Hygiene
+## 5. Current Stable Terminal Flow
+
+The current verified path for local use is:
+
+```bash
+cd /Users/kimyanghoon/Desktop/dev/agent-deck
+agent-deck setup --config examples/agent-deck.config.json
+agent-deck --config examples/agent-deck.config.json --select-models
+```
+
+At the model prompt:
+
+- Press `Enter` to keep the current model or provider default.
+- Type `default` to force the provider default.
+- Choose one of the listed numbers.
+- Type a custom model name only when the provider account supports it.
+
+Invalid numeric choices are rejected and the prompt is shown again. This avoids
+accidentally setting a model named `99` or another typo.
+
+Inside the TUI, start with:
+
+```text
+/co hello
+/cl hello
+/review Check the current diff for blocking issues.
+/status
+```
+
+If the terminal input ever shows escape-looking text, quit with `Ctrl+C`, run
+`reset`, and start Agent Deck again. The current TUI disables mouse tracking on
+startup and shutdown, but `reset` recovers a terminal session left in a bad mode
+by an older run or another terminal app.
+
+## 6. Session Hygiene
 
 Before a real session:
 

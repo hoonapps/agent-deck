@@ -10,6 +10,7 @@ This roadmap keeps the direction practical.
 - Better keyboard focus movement for three or more agent panes.
 - Confirmation prompts for destructive transcript actions.
 - Richer agent health display with timestamps and last stderr snippet.
+- Persist selected setup models back into `agent-deck.config.json` when requested.
 
 ## Agent Runtime
 
@@ -17,7 +18,8 @@ This roadmap keeps the direction practical.
 - Optional command allowlists for test/git commands.
 - Structured turn events in the transcript.
 - Safer cancellation for long-running child processes.
-- Provider-specific output cleaners behind explicit adapters.
+- Provider-specific output cleaners behind explicit adapters, beyond the current
+  Codex/Claude auth and model failure summaries.
 
 ## Collaboration
 

@@ -52,6 +52,19 @@ Start Agent Deck inside the repository you want the agents to work on:
 agent-deck
 ```
 
+Current stable local path:
+
+```bash
+cd /Users/kimyanghoon/Desktop/dev/agent-deck
+agent-deck setup --config examples/agent-deck.config.json
+agent-deck --config examples/agent-deck.config.json --select-models
+```
+
+This checkpoint has been verified with Codex and Claude login preflight,
+provider-default model selection, terminal mouse tracking disabled, concise
+provider failure messages, transcript capture, findings export, dashboard
+exports, lint, tests, package dry-run, and GitHub CI.
+
 Use a custom session name:
 
 ```bash
@@ -138,6 +151,30 @@ finding markers (`open`, `accepted`, `fixed`, `ignored`), severity/agent/status
 filters for session detail and trend views, time windows for trend summaries,
 an open high-severity review inbox, cross-session review trends, and download
 links for findings Markdown, trend snapshots, and Korean blog drafts.
+
+## Troubleshooting
+
+If the terminal starts echoing escape-looking text into the message box, quit
+Agent Deck with `Ctrl+C`, reset the terminal, and start again:
+
+```bash
+reset
+agent-deck --config examples/agent-deck.config.json --select-models
+```
+
+Agent Deck disables mouse tracking on startup and shutdown, so this is mainly
+for recovering a terminal session left in a bad mode by an older run or another
+TUI.
+
+If Codex or Claude fails immediately, run:
+
+```bash
+agent-deck setup --config examples/agent-deck.config.json --select-models
+```
+
+Existing logins are skipped. Missing logins are shown with the exact provider
+login command. Unsupported model errors are summarized in the pane with the
+next action instead of dumping the full provider error payload.
 
 Create a blog draft from an existing transcript:
 
