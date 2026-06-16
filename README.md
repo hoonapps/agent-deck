@@ -25,6 +25,7 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Export a Markdown session summary with `/export`
 - Export review output as a findings table with `/findings` or `agent-deck findings`
 - List and replay saved transcripts from the CLI
+- Browse saved sessions, replay timelines, and findings in a local web dashboard
 - Generate a Korean blog draft from a transcript with `agent-deck blog`
 - Configure agents per repository with `agent-deck.config.json`
 
@@ -97,6 +98,12 @@ Extract review findings into a Markdown table:
 
 ```bash
 agent-deck findings .agent-deck/sessions/session.md --out findings.md
+```
+
+Open the local web dashboard:
+
+```bash
+agent-deck web --port 4545
 ```
 
 Create a blog draft from an existing transcript:

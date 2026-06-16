@@ -7,6 +7,7 @@ import { createApp } from "../src/app.js";
 import { writeBlogDraft } from "../src/blog.js";
 import { findExecutable, loadConfig, parseModelOverrides } from "../src/config.js";
 import { buildReplayFromFile, formatSessionList, listTranscriptFiles, writeFindingsReport } from "../src/transcript-tools.js";
+import { startDashboard } from "../src/web.js";
 
 const args = process.argv.slice(2);
 
@@ -24,6 +25,7 @@ Usage:
   agent-deck replay <transcript.md> [--limit 40]
   agent-deck findings <transcript.md> [--out findings.md]
   agent-deck blog <transcript.md> [--out draft.md] [--title "Post title"]
+  agent-deck web [--host 127.0.0.1] [--port 4545]
   agent-deck init
 
 Shortcuts:
@@ -153,6 +155,8 @@ if (args.includes("-h") || args.includes("--help")) {
   findingsReport();
 } else if (args[0] === "blog") {
   blogDraft();
+} else if (args[0] === "web") {
+  await webDashboard();
 } else if (args[0] === "init") {
   initConfig();
 } else {
@@ -215,6 +219,24 @@ function findingsReport() {
   }
   const target = writeFindingsReport({ transcriptPath, outPath: valueAfter("--out") });
   console.log(`Created ${target}`);
+}
+
+async function webDashboard() {
+  const config = loadConfig({
+    configPath: valueAfter("--config"),
+    sessionName: valueAfter("--session"),
+    modelOverrides: cliModelOverrides(),
+    cwd: process.cwd()
+  });
+  const host = valueAfter("--host") || "127.0.0.1";
+  const port = Number(valueAfter("--port") || 4545);
+  const { url } = await startDashboard({
+    transcriptDir: valueAfter("--dir") || config.transcriptDir,
+    title: `${config.title} Web`,
+    host,
+    port
+  });
+  console.log(`Agent Deck dashboard: ${url}`);
 }
 
 function blogDraft() {

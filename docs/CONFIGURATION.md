@@ -178,6 +178,12 @@ agent-deck replay .agent-deck/sessions/session.md --limit 40
 agent-deck findings .agent-deck/sessions/session.md --out findings.md
 ```
 
+Open the local dashboard when you want to inspect sessions in a browser:
+
+```bash
+agent-deck web --host 127.0.0.1 --port 4545
+```
+
 Use the CLI blog helper to turn a transcript into a Korean draft:
 
 ```bash

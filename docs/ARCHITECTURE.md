@@ -15,6 +15,7 @@ runs in the selected workspace.
 | Transcript | `src/transcript.js` | Write Markdown session logs and build shared context snippets. |
 | Transcript tools | `src/transcript-tools.js` | Parse transcripts, list sessions, replay timelines, and extract review findings. |
 | Blog draft helper | `src/blog.js` | Convert a transcript into a Korean post draft with counts, recent turns, and a cleanup checklist. |
+| Web dashboard | `src/web.js` | Serve a local browser dashboard for sessions, replay timelines, and findings. |
 | Git/test helpers | `src/git.js` | Run shell commands in the workspace and summarize output. |
 
 ## Message Flow
@@ -98,6 +99,11 @@ The same transcript parser powers `agent-deck sessions`, `agent-deck replay`,
 and `agent-deck findings`. `/findings` uses the in-memory session entries to
 write a Markdown table from review outputs, while the CLI form works on saved
 transcript files after the session.
+
+`agent-deck web` starts a local-only HTTP server. It renders saved sessions with
+the same parser, exposes small JSON endpoints for session data, and keeps file
+selection constrained to transcript basenames under the configured transcript
+directory.
 
 ## Safety Boundaries
 

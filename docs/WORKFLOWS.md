@@ -107,6 +107,12 @@ agent-deck replay .agent-deck/sessions/session.md --limit 40
 agent-deck findings .agent-deck/sessions/session.md --out findings.md
 ```
 
+- Open the dashboard when a session needs visual inspection:
+
+```bash
+agent-deck web --port 4545
+```
+
 - Generate a first blog draft when the session is worth publishing:
 
 ```bash

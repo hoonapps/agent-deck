@@ -11,6 +11,7 @@ This roadmap keeps the direction practical.
 - Confirmation prompts for destructive transcript actions.
 - Richer agent health display with timestamps and last stderr snippet.
 - Findings extraction that understands structured JSON review output.
+- Dashboard filters for severity, agent, and publish-ready sessions.
 
 ## Agent Runtime
 
@@ -27,6 +28,7 @@ This roadmap keeps the direction practical.
 - Session replay mode for reading a transcript inside the TUI, beyond CLI replay.
 - Lightweight handoff summaries between agents.
 - Blog draft refinement for publish-ready Chirpy posts with screenshots.
+- Browser actions for exporting findings and blog drafts from the dashboard.
 
 ## Packaging
 
