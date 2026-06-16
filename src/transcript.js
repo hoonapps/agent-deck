@@ -1,5 +1,5 @@
 import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 export class Transcript {
   constructor({ dir, sessionName, config }) {
@@ -47,6 +47,41 @@ export class Transcript {
     const context = fitToMaxChars(this.entries.map(formatPanelEntry).join("\n\n"), maxChars);
     return [`{gray-fg}Transcript file: ${escapeTags(this.path)}{/gray-fg}`, "", context || "(No conversation history yet.)"].join("\n");
   }
+
+  exportSummary({ name = "summary", maxChars = 12000 } = {}) {
+    const safeName = String(name)
+      .trim()
+      .replace(/[^a-zA-Z0-9_.-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "summary";
+    const path = join(this.dir(), `${this.sessionBaseName()}-${safeName}.md`);
+    const inputs = this.entries.filter((entry) => entry.source.startsWith("input -> "));
+    const outputs = this.entries.filter((entry) => entry.source.startsWith("output <- "));
+    const tests = this.entries.filter((entry) => entry.source === "test");
+    const body = [
+      "# Agent Deck Session Export",
+      "",
+      `- Source transcript: ${this.path}`,
+      `- Exported: ${new Date().toISOString()}`,
+      `- User prompts: ${inputs.length}`,
+      `- Agent outputs: ${outputs.length}`,
+      `- Test events: ${tests.length}`,
+      "",
+      "## Recent Context",
+      "",
+      fitToMaxChars(this.entries.map(formatExportEntry).join("\n\n"), maxChars) || "(No entries yet.)",
+      ""
+    ].join("\n");
+    writeFileSync(path, body, "utf8");
+    return path;
+  }
+
+  sessionBaseName() {
+    return basename(this.path, ".md");
+  }
+
+  dir() {
+    return dirname(this.path);
+  }
 }
 
 function fence(value) {
@@ -73,6 +108,10 @@ function formatPanelEntry(entry) {
     `{${color}-fg}${label}{/${color}-fg}`,
     escapeTags(truncate(entry.message, 900))
   ].join("\n");
+}
+
+function formatExportEntry(entry) {
+  return [`### ${entry.time} ${entry.source}`, "", fence(truncate(entry.message, 2400)).trim()].join("\n");
 }
 
 function panelLabel(source) {

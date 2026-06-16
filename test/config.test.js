@@ -61,6 +61,8 @@ test("normalizeAgent creates stable ids and cwd", () => {
     baseArgs: ["--print", "--output-format", "text"],
     model: undefined,
     modelArg: "--model",
+    role: undefined,
+    turnTimeoutMs: 0,
     bracketedPaste: true,
     aliases: ["cl", "claude-code"],
     label: "Claude Code",
@@ -148,6 +150,54 @@ test("parseModelOverrides maps agent ids to models", () => {
     codex: "gpt-5.3-codex",
     claude: "sonnet"
   });
+});
+
+test("parseComposerCommand supports status, review, and export commands", () => {
+  assert.deepEqual(parseComposerCommand("/status"), { type: "status" });
+  assert.deepEqual(parseComposerCommand("/review inspect the diff"), {
+    type: "review",
+    message: "inspect the diff"
+  });
+  assert.deepEqual(parseComposerCommand("/export decisions"), {
+    type: "export",
+    name: "decisions"
+  });
+});
+
+test("loadConfig applies global and per-agent turn timeout values", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-config-"));
+  const configPath = join(dir, "agent-deck.config.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      turnTimeoutMs: 9000,
+      agents: [
+        { id: "default-timeout", command: "node", args: ["-e", "process.exit(0)"] },
+        { id: "custom-timeout", command: "node", turnTimeoutMs: 200, args: ["-e", "process.exit(0)"] }
+      ]
+    })
+  );
+  const config = loadConfig({ configPath, cwd: dir });
+  assert.equal(config.turnTimeoutMs, 9000);
+  assert.equal(config.agents[0].turnTimeoutMs, 9000);
+  assert.equal(config.agents[1].turnTimeoutMs, 200);
+});
+
+test("loadConfig normalizes review agents and role presets", () => {
+  const dir = mkdtempSync(join(tmpdir(), "agent-deck-config-"));
+  const configPath = join(dir, "agent-deck.config.json");
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      reviewAgents: ["Claude Reviewer"],
+      rolePresets: { "Careful Reviewer": "Find regressions." },
+      agents: [{ id: "Claude Reviewer", command: "node", role: "Careful Reviewer", args: ["-e", "process.exit(0)"] }]
+    })
+  );
+  const config = loadConfig({ configPath, cwd: dir });
+  assert.deepEqual(config.reviewAgents, ["claude-reviewer"]);
+  assert.equal(config.agents[0].role, "careful-reviewer");
+  assert.equal(config.rolePresets["careful-reviewer"], "Find regressions.");
 });
 
 test("runtimeSetAgentModel updates model args from base args", () => {

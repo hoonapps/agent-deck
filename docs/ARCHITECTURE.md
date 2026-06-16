@@ -25,6 +25,15 @@ runs in the selected workspace.
 6. Agent output is appended to the pane and transcript.
 7. The history panel is rebuilt from recent transcript entries.
 
+Agent processes also emit status updates. The TUI uses those updates to show
+state in the header and pane labels, and `/status` prints a fuller table with
+turn count, last duration, and exit information.
+
+The visual layout is intentionally dense: top agent panes, lower History and
+Activity panels, a fixed command hint bar, and a bottom composer. Pane border
+colors follow runtime state so a stalled or failed agent is visible without
+opening logs.
+
 Plain text only goes to an agent after the user enters an active chat route. This
 prevents accidental prompts from being sent at startup.
 
@@ -37,7 +46,8 @@ message -> child stdin -> stdout/stderr -> cleaned answer
 ```
 
 This is good for readable panes, deterministic transcripts, and short review
-turns.
+turns. Turn mode supports `turnTimeoutMs`, which kills long-running child
+processes and marks the agent state as `timeout`.
 
 Interactive mode keeps a PTY process running:
 
@@ -66,6 +76,13 @@ Current message for Claude:
 
 This lets a second agent join a conversation without manual copy/paste. The
 tradeoff is token cost, controlled by `maxHistoryChars`.
+
+## Session Export
+
+The transcript is the raw log. `/export [name]` writes a compact Markdown export
+next to that log. The export records counts for user prompts, agent outputs, and
+test events, then includes recent context. It is intended for handoff notes,
+decision logs, and blog draft material.
 
 ## Safety Boundaries
 

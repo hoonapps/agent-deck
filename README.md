@@ -17,6 +17,11 @@ AI coding agents are useful, but real workflows often need a human to copy conte
 - Optionally inject recent history into each routed message so another agent can join midstream
 - Run the configured test command without leaving the TUI
 - Set each agent model through config, environment variables, short launch flags, or `/set-model`
+- Show live agent status, last duration, and exit information with `/status`
+- Use status-colored headers, pane borders, and a command hint bar for a cleaner cockpit
+- Stop runaway turn-mode agents with configurable `turnTimeoutMs`
+- Send a reviewer prompt to selected agents with `/review`
+- Export a Markdown session summary with `/export`
 - Configure agents per repository with `agent-deck.config.json`
 
 ## Install
@@ -87,6 +92,10 @@ agent-deck --config examples/demo.config.json
 | `Ctrl+X` | Stop active agent process |
 | `Ctrl+C` | Quit |
 
+The TUI uses a compact cockpit layout: agent panes at the top, History and
+Activity panels below, a fixed command hint bar, and a focused composer at the
+bottom. Agent pane borders change color by state.
+
 ## Composer Commands
 
 | Command | Action |
@@ -98,6 +107,9 @@ agent-deck --config examples/demo.config.json
 | `/git` | Show git status in Activity |
 | `/history` | Refresh history panel |
 | `/test [command]` | Run test command |
+| `/status` | Show agent state, turn count, last exit, and last duration |
+| `/review <message>` | Send a review prompt to reviewer agents |
+| `/export [name]` | Write a Markdown session export next to the transcript |
 | `/restart <agent>` | Restart one agent process |
 | `/clear <agent\|all>` | Clear output panes |
 | `/models` | Show current agent models |
@@ -120,6 +132,11 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
   "testCommand": "npm test",
   "shareHistory": true,
   "maxHistoryChars": 6000,
+  "turnTimeoutMs": 300000,
+  "reviewAgents": ["codex", "claude"],
+  "rolePresets": {
+    "reviewer": "Find correctness, regression, test, and security issues first."
+  },
   "agents": [
     {
       "id": "codex",
@@ -127,6 +144,7 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
       "name": "Codex",
       "command": "codex",
       "mode": "turn",
+      "role": "implementer",
       "model": "gpt-5.3-codex",
       "args": []
     },
@@ -136,6 +154,7 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
       "name": "Claude",
       "command": "claude",
       "mode": "turn",
+      "role": "reviewer",
       "model": "sonnet",
       "args": []
     }
@@ -143,7 +162,7 @@ By default Agent Deck uses clean turn mode. Codex is called through `codex exec`
 }
 ```
 
-Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `mode`, `model`, `modelArg`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
+Each agent runs in the current workspace by default. You can set `cwd`, `env`, `args`, `mode`, `model`, `modelArg`, `role`, `turnTimeoutMs`, `aliases`, `bracketedPaste`, and `autoStart: false` per agent.
 
 Agent ids and aliases must be unique. Agent Deck validates this at startup so routing commands do not silently target the wrong process.
 

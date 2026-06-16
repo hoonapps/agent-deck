@@ -4,6 +4,22 @@ import { parseComposerCommand, runtimeSetAgentModel } from "./config.js";
 import { gitSummary, runCommand } from "./git.js";
 import { Transcript } from "./transcript.js";
 
+const THEME = {
+  bg: "black",
+  headerBg: "black",
+  accent: "cyan",
+  muted: "gray",
+  text: "white",
+  status: {
+    idle: "green",
+    running: "yellow",
+    failed: "red",
+    timeout: "red",
+    stopped: "gray",
+    unknown: "gray"
+  }
+};
+
 const HELP_TEXT = `Commands:
 /co [message]           enter Codex chat or send to Codex
 /cl [message]           enter Claude chat or send to Claude
@@ -12,6 +28,9 @@ const HELP_TEXT = `Commands:
 /git                    show git status in Activity
 /history                refresh History panel
 /test [command]         run tests
+/status                 show agent status
+/review <message>       send a review prompt to reviewer agents
+/export [name]          export a session summary
 /restart <agent>        restart an agent
 /clear <agent|all>      clear output
 /models                 list current agent models
@@ -36,6 +55,7 @@ class AgentDeckApp {
     this.boxes = new Map();
     this.activeAgentId = null;
     this.activityLines = [];
+    this.agentStatuses = new Map();
   }
 
   start() {
@@ -65,13 +85,13 @@ class AgentDeckApp {
       width: "100%",
       height: 1,
       tags: true,
-      style: { fg: "white", bg: "blue" }
+      style: { fg: THEME.text, bg: THEME.headerBg }
     });
     this.screen.append(this.header);
 
     const screenHeight = this.screen.height || 40;
     const bottomPanelHeight = Math.min(6, Math.max(4, Math.floor(screenHeight * 0.12)));
-    const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - 4);
+    const gridHeight = Math.max(14, screenHeight - bottomPanelHeight - 5);
     this.grid = blessed.layout({
       top: 1,
       left: 0,
@@ -95,8 +115,11 @@ class AgentDeckApp {
         mouse: true,
         scrollbar: { ch: " ", track: { bg: "black" }, style: { bg: "cyan" } },
         style: {
-          border: { fg: "gray" },
-          focus: { border: { fg: "cyan" } }
+          fg: THEME.text,
+          bg: THEME.bg,
+          border: { fg: THEME.muted },
+          focus: { border: { fg: THEME.accent } },
+          scrollbar: { bg: THEME.accent }
         }
       });
       this.grid.append(box);
@@ -108,7 +131,7 @@ class AgentDeckApp {
       top: bottomTop,
       left: 0,
       width: "50%",
-      bottom: 3,
+      bottom: 4,
       label: " History ",
       border: "line",
       scrollable: true,
@@ -123,7 +146,7 @@ class AgentDeckApp {
       top: bottomTop,
       left: "50%",
       width: "50%",
-      bottom: 3,
+      bottom: 4,
       label: " Activity ",
       border: "line",
       scrollable: true,
@@ -133,6 +156,16 @@ class AgentDeckApp {
       style: { border: { fg: "gray" } }
     });
     this.screen.append(this.activityBox);
+
+    this.statusBar = blessed.box({
+      bottom: 3,
+      left: 0,
+      width: "100%",
+      height: 1,
+      tags: true,
+      style: { fg: THEME.text, bg: THEME.headerBg }
+    });
+    this.screen.append(this.statusBar);
 
     this.input = blessed.textbox({
       bottom: 0,
@@ -144,7 +177,12 @@ class AgentDeckApp {
       inputOnFocus: true,
       keys: true,
       mouse: true,
-      style: { border: { fg: "cyan" } }
+      style: {
+        fg: THEME.text,
+        bg: THEME.bg,
+        border: { fg: THEME.accent },
+        focus: { border: { fg: "green" } }
+      }
     });
     this.screen.append(this.input);
 
@@ -179,9 +217,14 @@ class AgentDeckApp {
       const process = new AgentProcess(agent);
       this.agents.set(agent.id, process);
       process.on("data", (data) => this.appendAgentOutput(agent.id, data));
+      process.on("status", (status) => {
+        this.agentStatuses.set(agent.id, status);
+        this.updateAgentLabel(agent.id);
+        this.render();
+      });
       process.on("turn-start", () => this.appendAgentMeta(agent.id, "Working..."));
-      process.on("turn-exit", ({ code, durationMs }) => {
-        const status = code === 0 ? "done" : `failed (${code})`;
+      process.on("turn-exit", ({ code, durationMs, timedOut }) => {
+        const status = timedOut ? "timeout" : code === 0 ? "done" : `failed (${code})`;
         this.appendAgentMeta(agent.id, `Worked for ${formatDuration(durationMs)} - ${status}`);
       });
       process.on("error-output", (message) => this.log(`${agent.name}: ${message}`));
@@ -220,6 +263,12 @@ class AgentDeckApp {
       this.refreshHistory();
     } else if (command.type === "test") {
       this.runTest(command.command);
+    } else if (command.type === "status") {
+      this.showStatus();
+    } else if (command.type === "review") {
+      this.review(command.message);
+    } else if (command.type === "export") {
+      this.exportSession(command.name);
     } else if (command.type === "restart") {
       this.restart(command.target);
     } else if (command.type === "clear") {
@@ -282,6 +331,33 @@ class AgentDeckApp {
     this.log("Broadcast sent to all agents");
   }
 
+  review(message) {
+    if (!message) {
+      this.log("Usage: /review <message>");
+      return;
+    }
+    const targets = this.reviewAgents();
+    if (targets.length === 0) {
+      this.log("No review agents configured or available.");
+      return;
+    }
+    const prompt = [
+      this.config.rolePresets.reviewer || "Review the current work and report actionable findings.",
+      "",
+      "Review request:",
+      message,
+      "",
+      "Return findings first. Include file paths, line numbers, test gaps, and a short verdict."
+    ].join("\n");
+    for (const agent of targets) {
+      this.appendUserMessage(agent.id, `/review ${message}`);
+      this.agentProcess(agent.id)?.writeLine(this.buildAgentMessage(agent, prompt));
+    }
+    this.transcript.input(`review -> ${targets.map((agent) => agent.id).join(",")}`, message);
+    this.refreshHistory();
+    this.log(`Review sent to ${targets.map((agent) => agent.name).join(", ")}`);
+  }
+
   restart(target) {
     const agent = this.findAgent(target);
     if (!agent) {
@@ -299,7 +375,7 @@ class AgentDeckApp {
       return;
     }
     runtimeSetAgentModel(agent, model);
-    this.boxes.get(agent.id)?.setLabel(` ${agent.label} `);
+    this.updateAgentLabel(agent.id);
     this.agentProcess(agent.id)?.restart();
     this.log(`Set ${agent.name} model to ${agent.model}. Restarted ${agent.id}.`);
     this.render();
@@ -311,6 +387,22 @@ class AgentDeckApp {
       return `${agent.id.padEnd(10)} ${agent.model || "(default)"}  ${aliases}`;
     });
     this.log(`Models:\n${rows.join("\n")}`);
+  }
+
+  showStatus() {
+    const rows = this.config.agents.map((agent) => {
+      const status = this.agentStatus(agent.id);
+      const exit = status.lastExitCode ?? status.lastSignal ?? "-";
+      const duration = status.lastDurationMs == null ? "-" : formatDuration(status.lastDurationMs);
+      return `${agent.id.padEnd(10)} ${status.state.padEnd(8)} turns=${String(status.turns).padEnd(3)} last=${exit} duration=${duration}`;
+    });
+    this.log(`Status:\n${rows.join("\n")}`);
+  }
+
+  exportSession(name) {
+    const path = this.transcript.exportSummary({ name: name || "summary" });
+    this.transcript.event("export", path, { includeInContext: false });
+    this.log(`Exported session summary: ${path}`);
   }
 
   clear(target) {
@@ -396,7 +488,7 @@ class AgentDeckApp {
     this.updateHeader();
     for (const [agentId, box] of this.boxes.entries()) {
       const selected = this.activeAgentId === agentId;
-      box.style.border.fg = selected ? "cyan" : "gray";
+      box.style.border.fg = selected ? THEME.accent : this.statusColor(this.agentStatus(agentId).state);
     }
     this.render();
   }
@@ -417,10 +509,62 @@ class AgentDeckApp {
     return this.agents.get(id);
   }
 
+  agentStatus(id) {
+    return this.agentProcess(id)?.status() || {
+      id,
+      state: "unknown",
+      turns: 0,
+      lastExitCode: null,
+      lastSignal: null,
+      lastDurationMs: null
+    };
+  }
+
+  reviewAgents() {
+    const configured = this.config.reviewAgents
+      .map((id) => this.findAgent(id))
+      .filter(Boolean);
+    if (configured.length) return configured;
+    return this.config.agents.filter((agent) => agent.role === "reviewer" || agent.id === "claude" || agent.id === "codex");
+  }
+
+  updateAgentLabel(agentId) {
+    const agent = this.findAgent(agentId);
+    const box = this.boxes.get(agentId);
+    if (!agent || !box) return;
+    const status = this.agentStatus(agentId);
+    box.setLabel(` ${agent.label} [${status.state}] `);
+    if (this.activeAgentId !== agentId) box.style.border.fg = this.statusColor(status.state);
+  }
+
   updateHeader() {
     const agent = this.activeAgent();
     const routes = this.config.agents.map((item) => `/${item.aliases[0] || item.id}:${item.label}`).join(" ");
-    this.header.setContent(` ${this.config.title} | chat: ${agent?.id || "none"} | ${routes} | /all | /git | F10 test | Ctrl+C quit `);
+    const statuses = this.config.agents
+      .map((item) => {
+        const state = this.agentStatus(item.id).state;
+        return `{${this.statusColor(state)}-fg}${item.id}:${state}{/${this.statusColor(state)}-fg}`;
+      })
+      .join(" ");
+    this.header.setContent(` {bold}${this.config.title}{/bold}  chat:{cyan-fg}${agent?.id || "none"}{/cyan-fg}  ${statuses}  ${routes} `);
+  }
+
+  updateStatusBar() {
+    const parts = [
+      "{cyan-fg}/co{/cyan-fg} codex",
+      "{magenta-fg}/cl{/magenta-fg} claude",
+      "{yellow-fg}/review{/yellow-fg}",
+      "{green-fg}/test{/green-fg}",
+      "{blue-fg}/export{/blue-fg}",
+      "{white-fg}F8 history{/white-fg}",
+      "{white-fg}F10 test{/white-fg}",
+      "{red-fg}Ctrl+C quit{/red-fg}"
+    ];
+    this.statusBar?.setContent(` ${parts.join("  ")} `);
+  }
+
+  statusColor(state) {
+    return THEME.status[state] || THEME.status.unknown;
   }
 
   parseAgentRoute(value) {
@@ -441,17 +585,29 @@ class AgentDeckApp {
   }
 
   buildAgentMessage(agent, message) {
-    if (!this.config.shareHistory) return message;
+    const rolePrompt = agent.role ? this.config.rolePresets[agent.role] : "";
+    const parts = [];
+    if (rolePrompt) {
+      parts.push("Agent Deck role preset:", rolePrompt, "");
+    }
+    if (!this.config.shareHistory) {
+      parts.push(message);
+      return parts.join("\n");
+    }
     const context = this.transcript.recentContext(this.config.maxHistoryChars);
-    if (!context) return message;
-    return [
+    if (!context) {
+      parts.push(message);
+      return parts.join("\n");
+    }
+    parts.push(
       "Agent Deck shared conversation history follows. Use it as context for this turn. Do not summarize it unless asked.",
       "",
       context,
       "",
       `Current message for ${agent.name}:`,
       message
-    ].join("\n");
+    );
+    return parts.join("\n");
   }
 
   resizeAgents() {
@@ -465,6 +621,7 @@ class AgentDeckApp {
 
   render() {
     this.updateHeader();
+    this.updateStatusBar();
     this.screen?.render();
   }
 

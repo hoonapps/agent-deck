@@ -10,12 +10,22 @@ export class AgentProcess extends EventEmitter {
     this.pty = null;
     this.child = null;
     this.started = false;
+    this.state = "idle";
+    this.lastExitCode = null;
+    this.lastSignal = null;
+    this.lastDurationMs = null;
+    this.lastStartedAt = null;
+    this.turns = 0;
+    this.turnTimer = null;
   }
 
   start() {
     if (this.started) return;
     this.started = true;
-    if (this.agent.mode === "turn") return;
+    if (this.agent.mode === "turn") {
+      this.setState("idle");
+      return;
+    }
     try {
       const spawn = shellSpawn(this.agent.command, this.agent.args);
       this.pty = pty.spawn(spawn.command, spawn.args, {
@@ -25,8 +35,10 @@ export class AgentProcess extends EventEmitter {
         cwd: this.agent.cwd,
         env: { ...process.env, ...this.agent.env, TERM: "xterm-256color" }
       });
+      this.setState("running");
     } catch (error) {
       this.started = false;
+      this.setState("failed");
       this.emit("data", `Failed to start ${this.agent.command}: ${error.message}\n`);
       this.emit("exit", { code: 1, signal: null });
       return;
@@ -38,6 +50,9 @@ export class AgentProcess extends EventEmitter {
     });
     this.pty.onExit((event) => {
       this.started = false;
+      this.lastExitCode = event.code ?? null;
+      this.lastSignal = event.signal ?? null;
+      this.setState(event.code === 0 ? "idle" : "failed");
       this.emit("exit", event);
     });
   }
@@ -69,14 +84,20 @@ export class AgentProcess extends EventEmitter {
   }
 
   stop() {
+    this.clearTurnTimer();
     if (this.child) {
       this.child.kill();
       this.child = null;
     }
-    if (!this.pty) return;
+    if (!this.pty) {
+      this.started = false;
+      this.setState("stopped");
+      return;
+    }
     this.pty.kill();
     this.pty = null;
     this.started = false;
+    this.setState("stopped");
   }
 
   restart() {
@@ -91,6 +112,12 @@ export class AgentProcess extends EventEmitter {
     }
     const startedAt = Date.now();
     this.started = true;
+    this.lastStartedAt = startedAt;
+    this.lastExitCode = null;
+    this.lastSignal = null;
+    this.lastDurationMs = null;
+    this.turns += 1;
+    this.setState("running");
     this.emit("turn-start", { startedAt });
     const child = spawn(this.agent.command, this.agent.args, {
       cwd: this.agent.cwd,
@@ -98,8 +125,17 @@ export class AgentProcess extends EventEmitter {
       stdio: ["pipe", "pipe", "pipe"]
     });
     this.child = child;
+    let timedOut = false;
     let stdout = "";
     let stderr = "";
+    if (this.agent.turnTimeoutMs > 0) {
+      this.turnTimer = setTimeout(() => {
+        if (!this.child) return;
+        timedOut = true;
+        this.emit("data", `[agent-deck] turn timed out after ${formatDuration(this.agent.turnTimeoutMs)}\n`);
+        this.child.kill();
+      }, this.agent.turnTimeoutMs);
+    }
     child.stdout.on("data", (chunk) => {
       stdout += chunk.toString();
     });
@@ -107,20 +143,57 @@ export class AgentProcess extends EventEmitter {
       stderr += chunk.toString();
     });
     child.on("error", (error) => {
+      this.clearTurnTimer();
       this.child = null;
+      this.lastDurationMs = Date.now() - startedAt;
+      this.lastExitCode = 1;
+      this.setState("failed");
       this.emit("data", `Failed to start ${this.agent.command}: ${error.message}\n`);
-      this.emit("exit", { code: 1, signal: null, durationMs: Date.now() - startedAt });
+      this.emit("exit", { code: 1, signal: null, durationMs: this.lastDurationMs });
     });
     child.on("close", (code, signal) => {
+      this.clearTurnTimer();
       this.child = null;
+      this.lastDurationMs = Date.now() - startedAt;
+      this.lastExitCode = code;
+      this.lastSignal = signal;
       const output = cleanTurnOutput(stdout || stderr);
       if (output) this.emit("data", output);
-      if (code !== 0) {
+      if (timedOut) {
+        this.setState("timeout");
+        this.emit("error-output", `${this.agent.command} timed out after ${formatDuration(this.agent.turnTimeoutMs)}`);
+      } else if (code !== 0) {
+        this.setState("failed");
         this.emit("error-output", `${this.agent.command} exited code=${code} signal=${signal || ""}`);
+      } else {
+        this.setState("idle");
       }
-      this.emit("turn-exit", { code, signal, durationMs: Date.now() - startedAt });
+      this.emit("turn-exit", { code, signal, durationMs: this.lastDurationMs, timedOut });
     });
     child.stdin.end(String(text));
+  }
+
+  status() {
+    return {
+      id: this.agent.id,
+      state: this.state,
+      turns: this.turns,
+      lastExitCode: this.lastExitCode,
+      lastSignal: this.lastSignal,
+      lastDurationMs: this.lastDurationMs,
+      lastStartedAt: this.lastStartedAt
+    };
+  }
+
+  setState(state) {
+    this.state = state;
+    this.emit("status", this.status());
+  }
+
+  clearTurnTimer() {
+    if (!this.turnTimer) return;
+    clearTimeout(this.turnTimer);
+    this.turnTimer = null;
   }
 }
 
@@ -192,4 +265,9 @@ function shellQuote(value) {
   const text = String(value);
   if (/^[A-Za-z0-9_./:=@%+-]+$/.test(text)) return text;
   return `'${text.replace(/'/g, "'\\''")}'`;
+}
+
+function formatDuration(ms = 0) {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
 }

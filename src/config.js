@@ -13,7 +13,10 @@ export function defaultConfig(cwd = process.cwd()) {
     transcriptDir: join(cwd, ".agent-deck", "sessions"),
     shareHistory: true,
     maxHistoryChars: 6000,
+    turnTimeoutMs: 300000,
     testCommand: "npm test",
+    reviewAgents: [],
+    rolePresets: defaultRolePresets(),
     agents: [
       { id: "codex", name: "Codex", command: "codex", mode: "turn", args: defaultCodexTurnArgs(), cwd },
       { id: "claude", name: "Claude", command: "claude", mode: "turn", args: ["--print", "--output-format", "text"], cwd }
@@ -27,9 +30,16 @@ export function loadConfig({ configPath, sessionName, modelOverrides = {}, cwd =
   const userConfig = discovered ? readJson(discovered) : {};
   const workspace = resolve(cwd, userConfig.workspace || defaults.workspace);
   const transcriptDir = resolve(workspace, userConfig.transcriptDir || defaults.transcriptDir);
+  const turnTimeoutMs = nonNegativeInteger(userConfig.turnTimeoutMs ?? defaults.turnTimeoutMs, "turnTimeoutMs");
+  const rolePresets = normalizeRolePresets({ ...defaults.rolePresets, ...(userConfig.rolePresets || {}) });
   const agents = (userConfig.agents || defaults.agents).map((agent, index) => {
     const overrideId = normalizeId(agent.id || agent.name || `agent-${index + 1}`);
-    return normalizeAgent({ ...agent, model: modelForAgent(agent, overrideId, modelOverrides) }, workspace, index);
+    return normalizeAgent(
+      { ...agent, model: modelForAgent(agent, overrideId, modelOverrides) },
+      workspace,
+      index,
+      { turnTimeoutMs }
+    );
   });
   validateAgents(agents);
 
@@ -42,12 +52,15 @@ export function loadConfig({ configPath, sessionName, modelOverrides = {}, cwd =
     sessionName: sanitizeSessionName(sessionName || userConfig.sessionName || timestampName()),
     shareHistory: userConfig.shareHistory ?? defaults.shareHistory,
     maxHistoryChars: positiveInteger(userConfig.maxHistoryChars ?? defaults.maxHistoryChars, "maxHistoryChars"),
+    turnTimeoutMs,
     testCommand: userConfig.testCommand ?? defaults.testCommand,
+    reviewAgents: normalizeReviewAgents(userConfig.reviewAgents || defaults.reviewAgents),
+    rolePresets,
     agents
   };
 }
 
-export function normalizeAgent(agent, workspace, index = 0) {
+export function normalizeAgent(agent, workspace, index = 0, defaults = {}) {
   if (!agent || typeof agent !== "object") {
     throw new Error(`Invalid agent at index ${index}`);
   }
@@ -72,6 +85,8 @@ export function normalizeAgent(agent, workspace, index = 0) {
     baseArgs: rawArgs,
     model,
     modelArg: agent.modelArg === false ? false : agent.modelArg || "--model",
+    role: typeof agent.role === "string" && agent.role.trim() ? normalizeId(agent.role) : undefined,
+    turnTimeoutMs: nonNegativeInteger(agent.turnTimeoutMs ?? defaults.turnTimeoutMs ?? 0, `Agent ${id} turnTimeoutMs`),
     bracketedPaste: agent.bracketedPaste !== false,
     aliases,
     cwd: resolve(workspace, agent.cwd || "."),
@@ -126,6 +141,12 @@ export function parseComposerCommand(input, agentIds = []) {
       return { type: "history" };
     case "test":
       return { type: "test", command: tail || undefined };
+    case "status":
+      return { type: "status" };
+    case "review":
+      return { type: "review", message: tail };
+    case "export":
+      return { type: "export", name: tail || undefined };
     case "restart":
       return { type: "restart", target: rest[0] };
     case "clear":
@@ -221,6 +242,37 @@ function positiveInteger(value, name) {
     throw new Error(`${name} must be a positive integer`);
   }
   return parsed;
+}
+
+function nonNegativeInteger(value, name) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return parsed;
+}
+
+function normalizeReviewAgents(values = []) {
+  if (!Array.isArray(values)) return [];
+  return values.map(normalizeId).filter(Boolean);
+}
+
+function normalizeRolePresets(presets = {}) {
+  const normalized = {};
+  for (const [key, value] of Object.entries(presets)) {
+    const id = normalizeId(key);
+    if (id && typeof value === "string" && value.trim()) normalized[id] = value.trim();
+  }
+  return normalized;
+}
+
+function defaultRolePresets() {
+  return {
+    implementer: "You are the implementer. Make the smallest correct code change, keep tests focused, and avoid unrelated refactors.",
+    reviewer: "You are the reviewer. Prioritize correctness, regressions, missing tests, security, and maintainability. Lead with actionable findings.",
+    tester: "You are the tester. Identify verification gaps, edge cases, and the fastest commands that prove the change works.",
+    architect: "You are the architect. Focus on system boundaries, operational risk, data flow, and long-term maintainability."
+  };
 }
 
 export function parseModelOverrides(values = []) {

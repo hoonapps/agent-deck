@@ -8,12 +8,12 @@ This roadmap keeps the direction practical.
 - Stronger CLI argument parsing with clear errors for unknown flags.
 - CI examples that run `agent-deck validate` before starting a session.
 - Configurable pane layouts for more than two agents.
-- Better transcript controls: pause recording, redact last entry, export summary.
-- Agent health display: running, idle, turn running, last exit code.
+- Better transcript controls: pause recording and redact last entry.
+- Richer agent health display with timestamps and last stderr snippet.
 
 ## Agent Runtime
 
-- Per-agent timeout for turn mode.
+- Turn timeout controls in the TUI, not only config.
 - Optional command allowlists for test/git commands.
 - Structured turn events in the transcript.
 - Safer cancellation for long-running child processes.
@@ -22,7 +22,7 @@ This roadmap keeps the direction practical.
 ## Collaboration
 
 - Named task lanes such as `review`, `implement`, `research`.
-- Route presets: send the same prompt to reviewer agents only.
+- Route presets beyond review: implement, test, research, and architecture lanes.
 - Session replay mode for reading a transcript in the TUI.
 - Lightweight handoff summaries between agents.
 

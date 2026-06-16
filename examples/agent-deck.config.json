@@ -3,6 +3,8 @@
   "testCommand": "npm test",
   "shareHistory": true,
   "maxHistoryChars": 6000,
+  "turnTimeoutMs": 300000,
+  "reviewAgents": ["codex", "claude"],
   "agents": [
     {
       "id": "codex",
@@ -10,6 +12,7 @@
       "name": "Codex",
       "command": "codex",
       "mode": "turn",
+      "role": "implementer",
       "model": "gpt-5.3-codex",
       "args": []
     },
@@ -19,6 +22,7 @@
       "name": "Claude",
       "command": "claude",
       "mode": "turn",
+      "role": "reviewer",
       "model": "sonnet",
       "args": []
     }

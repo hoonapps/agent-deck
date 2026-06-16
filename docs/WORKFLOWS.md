@@ -10,8 +10,10 @@ Use Codex for implementation review and Claude for a second opinion:
 ```text
 /co Review the current diff. Focus on correctness and tests.
 /cl Read the same diff and look for product or UX risks.
+/review Inspect the current diff and list blocking issues first.
 /git
 /test
+/status
 ```
 
 Because `shareHistory` is enabled by default, the second agent receives recent
@@ -25,6 +27,7 @@ Use one agent to make progress and another to challenge it:
 /co Implement the narrowest fix for the failing test.
 /test
 /cl Review the changed files and point out regressions.
+/export implementation-review
 /co Apply only the review items that are clearly correct.
 ```
 
@@ -58,10 +61,12 @@ Then type:
 /ea hello
 /eb summarize the previous message
 /history
+/status
 ```
 
 This is useful for checking terminal compatibility before configuring real
-agents.
+agents. It also lets you check the status-colored panes and command hint bar
+without installing provider CLIs.
 
 ## 5. Session Hygiene
 
@@ -78,6 +83,8 @@ During a session:
 /git
 /test
 /models
+/status
+/export decisions
 ```
 
 After a session:

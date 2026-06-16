@@ -2,6 +2,8 @@
   "title": "Agent Deck Demo",
   "testCommand": "npm test",
   "shareHistory": true,
+  "turnTimeoutMs": 30000,
+  "reviewAgents": ["echo-b"],
   "agents": [
     {
       "id": "echo-a",
@@ -9,6 +11,7 @@
       "name": "Echo A",
       "command": "node",
       "mode": "turn",
+      "role": "implementer",
       "bracketedPaste": false,
       "args": [
         "-e",
@@ -21,6 +24,7 @@
       "name": "Echo B",
       "command": "node",
       "mode": "turn",
+      "role": "reviewer",
       "bracketedPaste": false,
       "args": [
         "-e",

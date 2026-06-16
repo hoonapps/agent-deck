@@ -33,6 +33,9 @@ Composer commands:
   /to <agent> <msg>       Send a message to one agent and enter that chat
   /git                    Show git status in Activity
   /test [command]         Run test command in the activity panel
+  /status                 Show agent state and last turn result
+  /review <msg>           Send a review prompt to reviewer agents
+  /export [name]          Export a Markdown session summary
   /restart <agent>        Restart one agent process
   /clear <agent|all>      Clear output
   /models                 List current agent models
