@@ -44,6 +44,8 @@ test("dashboardModel summarizes sessions, replay, and findings", () => {
   assert.equal(model.selected.status, "draft");
   assert.equal(model.selected.findings[0].status, "open");
   assert.match(model.selected.findings[0].key, /^[a-f0-9]{12}$/);
+  assert.equal(model.inbox.count, 1);
+  assert.equal(model.inbox.findings[0].session, "review.md");
   assert.match(model.selected.replay, /YOU -> review -> claude/);
 
   const filtered = dashboardModel({ transcriptDir: dir, selectedName: "review.md", filters: { severity: "high", agent: "claude" } });
@@ -63,6 +65,8 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(html, /src\/app\.js:12/);
     assert.match(html, /class="status draft"/);
     assert.match(html, /class="finding-status open active"/);
+    assert.match(html, /Review Inbox/);
+    assert.match(html, /1 open high findings/);
 
     const sessions = await fetchJson(new URL("/api/sessions", url));
     assert.equal(sessions[0].name, "review.md");
@@ -76,6 +80,12 @@ test("startDashboard serves HTML and JSON APIs", async () => {
     assert.match(session.findings[0].key, /^[a-f0-9]{12}$/);
     assert.equal("markdown" in session, false);
     assert.equal("path" in session, false);
+
+    const inbox = await fetchJson(new URL("/api/inbox", url));
+    assert.equal(inbox.count, 1);
+    assert.equal(inbox.findings[0].session, "review.md");
+    assert.equal(inbox.findings[0].severity, "high");
+    assert.equal(inbox.findings[0].status, "open");
 
     const filtered = await fetchJson(new URL("/api/session?file=review.md&severity=medium&agent=codex", url));
     assert.equal(filtered.findings.length, 1);
@@ -122,6 +132,9 @@ test("dashboard persists finding status markers", async () => {
     const open = await fetchJson(new URL("/api/session?file=review.md&status=open", url));
     assert.equal(open.findings.length, 1);
     assert.notEqual(open.findings[0].key, target.key);
+
+    const inbox = await fetchJson(new URL("/api/inbox", url));
+    assert.equal(inbox.count, 0);
 
     const fixedExport = await fetchText(new URL("/export/findings?file=review.md&status=fixed", url));
     assert.match(fixedExport, /src\/app\.js:12/);

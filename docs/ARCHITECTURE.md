@@ -117,6 +117,10 @@ are the only dashboard write paths; they are stored in
 `.agent-deck-session-state.json` under the transcript directory and leave
 transcript Markdown unchanged.
 
+The review inbox is a derived read model over saved transcripts. It scans
+sessions for findings with `severity=high` and `status=open`, then renders those
+items above the selected session detail and through `GET /api/inbox`.
+
 ## Safety Boundaries
 
 Agent Deck runs locally with the permissions of the current shell. It does not

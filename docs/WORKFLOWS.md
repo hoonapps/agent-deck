@@ -124,6 +124,8 @@ Mark sessions as `published` after they become posts, or `deferred` when they
 should stay in the archive but not enter the current publishing queue.
 Mark individual findings as `accepted`, `fixed`, or `ignored` as review items
 move through implementation.
+Use the Review Inbox at the top of the dashboard to keep open high-severity
+findings visible across sessions.
 
 - Generate a first blog draft when the session is worth publishing:
 

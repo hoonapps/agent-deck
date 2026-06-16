@@ -211,6 +211,8 @@ dashboard. The transcript Markdown files are not rewritten.
 The dashboard renders the same replay and findings data as the CLI. It can
 filter findings by severity, agent, or finding status and download filtered
 findings or a Korean blog draft for the selected session.
+It also shows a review inbox for `open` + `high` findings across all saved
+sessions, exposed as `GET /api/inbox`.
 
 Use the CLI blog helper to turn a transcript into a Korean draft:
 
